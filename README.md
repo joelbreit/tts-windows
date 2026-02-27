@@ -19,6 +19,21 @@ dotnet build ReadSelectedTextTts.slnx
 dotnet run --project .\ReadSelectedTextTts\ReadSelectedTextTts.csproj
 ```
 
+### Optional: open a live log console
+
+Run with `--console` to attach to the parent terminal (or open a new console if needed):
+
+```powershell
+dotnet run --project .\ReadSelectedTextTts\ReadSelectedTextTts.csproj -- --console
+```
+
+You can also enable console logging with an environment variable:
+
+```powershell
+$env:RSTTS_CONSOLE_LOG = "1"
+dotnet run --project .\ReadSelectedTextTts\ReadSelectedTextTts.csproj
+```
+
 ## Usage
 
 - Global hotkey: `Win + Alt + R`

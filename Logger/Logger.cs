@@ -170,6 +170,75 @@ public static class Logger
 			_useAnsiConsole = enable;
 	}
 
+	/// <summary>
+	/// Ensures a console is available for GUI processes (for example WPF WinExe apps),
+	/// then rebinds stdout/stderr so log output goes to that console with ANSI coloring.
+	/// </summary>
+	public static bool EnsureConsoleForGuiApp(
+		bool attachToParent = true,
+		bool allocateIfMissing = true,
+		string? title = null
+	)
+	{
+		try
+		{
+			if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+			{
+				lock (_configLock)
+				{
+					_consoleWriter = Console.Out;
+					_useAnsiConsole = DetectAndEnableAnsi();
+				}
+
+				if (!string.IsNullOrWhiteSpace(title))
+					Console.Title = title;
+
+				return true;
+			}
+
+			var hasConsole = GetConsoleWindow() != IntPtr.Zero;
+			if (!hasConsole)
+			{
+				var attached = false;
+				if (attachToParent)
+					attached = AttachConsole(ATTACH_PARENT_PROCESS);
+
+				if (!attached && allocateIfMissing)
+					attached = AllocConsole();
+
+				if (!attached)
+					return false;
+			}
+
+			RebindConsoleStreams();
+			if (!string.IsNullOrWhiteSpace(title))
+				Console.Title = title;
+
+			lock (_configLock)
+			{
+				_consoleWriter = Console.Out;
+				_useAnsiConsole = DetectAndEnableAnsi();
+			}
+
+			return true;
+		}
+		catch
+		{
+			return false;
+		}
+	}
+
+	private static void RebindConsoleStreams()
+	{
+		var stdout = Console.OpenStandardOutput();
+		var stdoutWriter = new StreamWriter(stdout) { AutoFlush = true };
+		Console.SetOut(stdoutWriter);
+
+		var stderr = Console.OpenStandardError();
+		var stderrWriter = new StreamWriter(stderr) { AutoFlush = true };
+		Console.SetError(stderrWriter);
+	}
+
 	// Map a source string to an RGB color via SHA1 + constrained hue ranges.
 	public static (int r, int g, int b) SourceToRgb(string source)
 	{
@@ -511,6 +580,16 @@ public static class Logger
 
 	private const int STD_OUTPUT_HANDLE = -11;
 	private const int ENABLE_VIRTUAL_TERMINAL_PROCESSING = 0x0004;
+	private const int ATTACH_PARENT_PROCESS = -1;
+
+	[DllImport("kernel32.dll", SetLastError = true)]
+	private static extern bool AllocConsole();
+
+	[DllImport("kernel32.dll", SetLastError = true)]
+	private static extern bool AttachConsole(int dwProcessId);
+
+	[DllImport("kernel32.dll")]
+	private static extern IntPtr GetConsoleWindow();
 
 	[DllImport("kernel32.dll", SetLastError = true)]
 	private static extern IntPtr GetStdHandle(int nStdHandle);
