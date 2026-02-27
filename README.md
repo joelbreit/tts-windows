@@ -39,8 +39,8 @@ dotnet run --project .\ReadSelectedTextTts\ReadSelectedTextTts.csproj
   - Selected voice ID
   - Playback speed
   - Hotkey modifiers/key
-- Debug log: `%AppData%\ReadSelectedTextTts\debug.log`
-  - Logs requested and applied playback rate
+- App log: `%AppData%\ReadSelectedTextTts\app.log`
+  - Includes playback events and temporary detailed selection diagnostics (UIA + clipboard fallback)
 
 ## Selection strategy
 

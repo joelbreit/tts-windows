@@ -1,5 +1,5 @@
 using ReadSelectedTextTts.Models;
-using System.IO;
+using Log = Logger.Logger;
 using Windows.Media.Core;
 using Windows.Media.Playback;
 using Windows.Media.SpeechSynthesis;
@@ -9,19 +9,21 @@ namespace ReadSelectedTextTts.Tts;
 public sealed class TtsService : IDisposable
 {
     private readonly MediaPlayer _mediaPlayer;
-    private readonly string _debugLogPath;
     private SpeechSynthesisStream? _activeStream;
 
     public TtsService(string appDirectoryPath)
     {
-        Directory.CreateDirectory(appDirectoryPath);
-        _debugLogPath = Path.Combine(appDirectoryPath, "debug.log");
+        Log.Inf($"Initializing TTS service. App directory: {appDirectoryPath}");
         _mediaPlayer = new MediaPlayer();
 
-        _mediaPlayer.MediaEnded += (_, _) => UpdatePlaybackState(false, false);
+        _mediaPlayer.MediaEnded += (_, _) =>
+        {
+            Log.Dbg("Media playback ended.");
+            UpdatePlaybackState(false, false);
+        };
         _mediaPlayer.MediaFailed += (_, args) =>
         {
-            LogDebug($"Media failed: {args.Error} ({args.ErrorMessage})");
+            Log.Err($"Media playback failed: {args.Error} ({args.ErrorMessage})");
             UpdatePlaybackState(false, false);
         };
     }
@@ -34,20 +36,27 @@ public sealed class TtsService : IDisposable
 
     public IReadOnlyList<VoiceOption> GetInstalledVoices()
     {
-        return SpeechSynthesizer.AllVoices
+        var voices = SpeechSynthesizer.AllVoices
             .Select(voice => new VoiceOption(voice.DisplayName, voice.Id, voice))
             .OrderBy(voice => voice.DisplayName.Contains("(Natural)", StringComparison.OrdinalIgnoreCase) ? 0 : 1)
             .ThenBy(voice => voice.DisplayName, StringComparer.OrdinalIgnoreCase)
             .ToList();
+
+        var naturalCount = voices.Count(voice =>
+            voice.DisplayName.Contains("(Natural)", StringComparison.OrdinalIgnoreCase));
+        Log.Inf($"Loaded {voices.Count} voice(s). Natural voices: {naturalCount}.");
+        return voices;
     }
 
     public async Task SpeakAsync(string text, VoiceInformation voice, double rate)
     {
         if (string.IsNullOrWhiteSpace(text))
         {
+            Log.Wrn("SpeakAsync called with empty text.");
             return;
         }
 
+        Log.Dbg($"Speak request: voice='{voice.DisplayName}', textLength={text.Length}, rate={rate:F1}x");
         Stop();
 
         using var synth = new SpeechSynthesizer();
@@ -55,36 +64,43 @@ public sealed class TtsService : IDisposable
 
         _activeStream = await synth.SynthesizeTextToStreamAsync(text);
         _mediaPlayer.Source = MediaSource.CreateFromStream(_activeStream, _activeStream.ContentType);
+        Log.Trc($"Synthesized stream. Size={_activeStream.Size}, ContentType={_activeStream.ContentType}");
 
         ApplyPlaybackRate(rate);
         _mediaPlayer.Play();
         UpdatePlaybackState(true, false);
+        Log.Dbg("Playback started.");
     }
 
     public void Pause()
     {
         if (!IsPlaying || IsPaused)
         {
+            Log.Trc($"Pause ignored. IsPlaying={IsPlaying}, IsPaused={IsPaused}");
             return;
         }
 
         _mediaPlayer.Pause();
         UpdatePlaybackState(true, true);
+        Log.Dbg("Playback paused.");
     }
 
     public void Resume()
     {
         if (!IsPlaying || !IsPaused)
         {
+            Log.Trc($"Resume ignored. IsPlaying={IsPlaying}, IsPaused={IsPaused}");
             return;
         }
 
         _mediaPlayer.Play();
         UpdatePlaybackState(true, false);
+        Log.Dbg("Playback resumed.");
     }
 
     public void Stop()
     {
+        Log.Trc($"Stopping playback. IsPlaying={IsPlaying}, IsPaused={IsPaused}");
         _mediaPlayer.Pause();
         _mediaPlayer.Source = null;
 
@@ -96,6 +112,7 @@ public sealed class TtsService : IDisposable
 
     public void Dispose()
     {
+        Log.Inf("Disposing TTS service.");
         Stop();
         _mediaPlayer.Dispose();
         GC.SuppressFinalize(this);
@@ -112,24 +129,24 @@ public sealed class TtsService : IDisposable
 
             if (Math.Abs(appliedRate - requestedClamped) > 0.001)
             {
-                LogDebug($"Requested rate {requestedClamped:F1}x, applied {appliedRate:F2}x.");
+                Log.Wrn($"Requested rate {requestedClamped:F1}x, applied {appliedRate:F2}x.");
             }
             else
             {
-                LogDebug($"Applied rate {appliedRate:F2}x.");
+                Log.Dbg($"Playback rate applied: {appliedRate:F2}x.");
             }
         }
         catch (Exception ex)
         {
-            LogDebug($"Rate set failed for {requestedClamped:F1}x: {ex.Message}");
+            Log.Wrn($"Playback rate set failed for {requestedClamped:F1}x: {ex.Message}");
             try
             {
                 _mediaPlayer.PlaybackSession.PlaybackRate = 1.0;
-                LogDebug("Fell back to 1.0x playback rate.");
+                Log.Wrn("Fell back to 1.0x playback rate.");
             }
             catch
             {
-                LogDebug("Failed to apply fallback playback rate.");
+                Log.Err("Failed to apply fallback playback rate.");
             }
         }
     }
@@ -139,16 +156,6 @@ public sealed class TtsService : IDisposable
         IsPlaying = isPlaying;
         IsPaused = isPaused;
         PlaybackStateChanged?.Invoke(this, EventArgs.Empty);
-    }
-
-    private void LogDebug(string message)
-    {
-        try
-        {
-            File.AppendAllText(_debugLogPath, $"{DateTime.Now:O} {message}{Environment.NewLine}");
-        }
-        catch
-        {
-        }
+        Log.Trc($"Playback state updated: IsPlaying={isPlaying}, IsPaused={isPaused}");
     }
 }

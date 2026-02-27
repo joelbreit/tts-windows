@@ -1,6 +1,7 @@
 using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Interop;
+using Log = Logger.Logger;
 
 namespace ReadSelectedTextTts.Hotkeys;
 
@@ -44,7 +45,19 @@ public sealed class GlobalHotkey : IDisposable
         _source = HwndSource.FromHwnd(_windowHandle);
         _source?.AddHook(WndProc);
 
-        return RegisterHotKey(_windowHandle, _id, _modifiers, _key);
+        var registered = RegisterHotKey(_windowHandle, _id, _modifiers, _key);
+        if (!registered)
+        {
+            var error = Marshal.GetLastWin32Error();
+            Log.Wrn(
+                $"RegisterHotKey failed. Id={_id}, Modifiers=0x{_modifiers:X}, Key=0x{_key:X}, LastError={error}");
+        }
+        else
+        {
+            Log.Dbg($"RegisterHotKey succeeded. Id={_id}, Modifiers=0x{_modifiers:X}, Key=0x{_key:X}");
+        }
+
+        return registered;
     }
 
     public void Dispose()
@@ -63,7 +76,7 @@ public sealed class GlobalHotkey : IDisposable
     {
         if (_windowHandle != IntPtr.Zero)
         {
-            UnregisterHotKey(_windowHandle, _id);
+            _ = UnregisterHotKey(_windowHandle, _id);
         }
 
         _source?.RemoveHook(WndProc);
@@ -75,6 +88,7 @@ public sealed class GlobalHotkey : IDisposable
     {
         if (msg == WmHotkey && wParam.ToInt32() == _id)
         {
+            Log.Trc($"Global hotkey message received. Id={_id}");
             Pressed?.Invoke(this, EventArgs.Empty);
             handled = true;
         }

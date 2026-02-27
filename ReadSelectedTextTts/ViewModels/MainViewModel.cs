@@ -6,6 +6,7 @@ using ReadSelectedTextTts.Selection;
 using ReadSelectedTextTts.Settings;
 using ReadSelectedTextTts.Tts;
 using Windows.System;
+using Log = Logger.Logger;
 
 namespace ReadSelectedTextTts.ViewModels;
 
@@ -147,10 +148,13 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
     public async Task InitializeAsync()
     {
+        Log.Inf("Initializing MainViewModel.");
         _settings = await _settingsService.LoadAsync();
         NormalizeSettings();
         _activeHotkeyModifiers = _settings.HotkeyModifiers;
         _activeHotkeyKey = _settings.HotkeyKey;
+        Log.Dbg(
+            $"Loaded settings. Speed={_settings.Speed:F1}, VoiceId='{_settings.VoiceId ?? "<null>"}', Hotkey={FormatHotkey(_activeHotkeyModifiers, _activeHotkeyKey)}");
 
         Speed = _settings.Speed;
 
@@ -162,12 +166,14 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
         if (Voices.Count == 0)
         {
+            Log.Wrn("No Windows voices were found.");
             NotificationRequested?.Invoke(this, "No Windows voices installed.");
             await SaveSettingsAsync();
             return;
         }
 
         SelectedVoice = ResolveSelectedVoice();
+        Log.Inf($"Selected default voice: {SelectedVoice?.DisplayName ?? "<none>"}");
         await SaveSettingsAsync();
         OnPropertyChanged(nameof(HotkeyDisplay));
     }
@@ -182,19 +188,23 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
         try
         {
+            Log.Dbg($"ReadSelection requested. Active voice='{SelectedVoice.DisplayName}', speed={Speed:F1}x");
             var selectedText = await _selectionReader.ReadSelectionAsync();
             if (string.IsNullOrWhiteSpace(selectedText))
             {
+                Log.Wrn("ReadSelection found no text.");
                 NotificationRequested?.Invoke(this, "No selected text found. Select text in another app or use Read Test Text.");
                 return;
             }
 
+            Log.Inf($"ReadSelection speaking text. Length={selectedText.Length}");
             await _ttsService.SpeakAsync(selectedText, SelectedVoice.Voice, Speed);
             IsPlaying = _ttsService.IsPlaying;
             IsPaused = _ttsService.IsPaused;
         }
         catch (Exception ex)
         {
+            Log.Err($"ReadSelection failed: {ex}");
             NotificationRequested?.Invoke(this, $"Read failed: {ex.Message}");
         }
     }
@@ -207,6 +217,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         }
 
         _disposed = true;
+        Log.Inf("Disposing MainViewModel.");
         _ttsService.PlaybackStateChanged -= OnPlaybackStateChanged;
         _ttsService.Dispose();
         _saveLock.Dispose();
@@ -217,6 +228,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     {
         _activeHotkeyModifiers = modifiers;
         _activeHotkeyKey = key;
+        Log.Inf($"Active hotkey set to {FormatHotkey(modifiers, key)}. Persist={persist}");
         OnPropertyChanged(nameof(HotkeyDisplay));
 
         if (!persist)
@@ -266,12 +278,14 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
         try
         {
+            Log.Dbg($"ReadTestText requested. Length={ManualText.Length}, speed={Speed:F1}x");
             await _ttsService.SpeakAsync(ManualText, SelectedVoice.Voice, Speed);
             IsPlaying = _ttsService.IsPlaying;
             IsPaused = _ttsService.IsPaused;
         }
         catch (Exception ex)
         {
+            Log.Err($"ReadTestText failed: {ex}");
             NotificationRequested?.Invoke(this, $"Read failed: {ex.Message}");
         }
     }
@@ -388,8 +402,9 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         {
             await _settingsService.SaveAsync(_settings);
         }
-        catch
+        catch (Exception ex)
         {
+            Log.Wrn($"Failed to save settings: {ex.Message}");
         }
         finally
         {

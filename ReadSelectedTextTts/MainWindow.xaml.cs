@@ -7,6 +7,7 @@ using ReadSelectedTextTts.Settings;
 using ReadSelectedTextTts.Tray;
 using ReadSelectedTextTts.Tts;
 using ReadSelectedTextTts.ViewModels;
+using Log = Logger.Logger;
 
 namespace ReadSelectedTextTts;
 
@@ -28,6 +29,7 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
+        Log.Inf("MainWindow constructor starting.");
 
         var settingsService = new SettingsService();
         var selectionReader = new SelectionReader();
@@ -46,6 +48,7 @@ public partial class MainWindow : Window
         Loaded += OnLoaded;
         Closing += OnClosing;
         StateChanged += OnStateChanged;
+        Log.Inf("MainWindow initialized.");
     }
 
     private async void OnLoaded(object sender, RoutedEventArgs e)
@@ -56,6 +59,7 @@ public partial class MainWindow : Window
         }
 
         _initialized = true;
+        Log.Inf("MainWindow loaded. Initializing view model and hotkey.");
 
         await _viewModel.InitializeAsync();
         RegisterHotkey();
@@ -64,12 +68,14 @@ public partial class MainWindow : Window
 
     private void RegisterHotkey()
     {
+        Log.Dbg("Registering global hotkey.");
         _globalHotkey?.Dispose();
         _globalHotkey = null;
 
         var configured = ((HotkeyModifiers)_viewModel.HotkeyModifiers, _viewModel.HotkeyKey);
         if (TryRegisterHotkeyCandidate(configured.Item1, configured.Item2))
         {
+            Log.Inf($"Registered configured hotkey: {FormatHotkey((uint)configured.Item1, configured.Item2)}");
             _viewModel.SetActiveHotkey((uint)configured.Item1, configured.Item2, persist: false);
             return;
         }
@@ -83,9 +89,11 @@ public partial class MainWindow : Window
 
             if (!TryRegisterHotkeyCandidate(fallback.Modifiers, fallback.Key))
             {
+                Log.Dbg($"Hotkey candidate failed: {FormatHotkey((uint)fallback.Modifiers, fallback.Key)}");
                 continue;
             }
 
+            Log.Wrn($"Configured hotkey unavailable. Falling back to {FormatHotkey((uint)fallback.Modifiers, fallback.Key)}");
             _viewModel.SetActiveHotkey((uint)fallback.Modifiers, fallback.Key, persist: true);
             _trayIconManager.ShowNotification(
                 "Read Selected Text TTS",
@@ -93,6 +101,7 @@ public partial class MainWindow : Window
             return;
         }
 
+        Log.Err("Unable to register any global hotkey.");
         _trayIconManager.ShowNotification("Read Selected Text TTS", "Unable to register any global hotkey.");
     }
 
@@ -112,12 +121,14 @@ public partial class MainWindow : Window
 
     private async void OnGlobalHotkeyPressed(object? sender, EventArgs e)
     {
+        Log.Dbg("Global hotkey pressed.");
         await Task.Delay(120);
         await _viewModel.ReadSelectionAsync();
     }
 
     private async void OnReadSelectionRequested(object? sender, EventArgs e)
     {
+        Log.Dbg("Tray menu requested Read Selection.");
         await _viewModel.ReadSelectionAsync();
     }
 
@@ -128,16 +139,19 @@ public partial class MainWindow : Window
 
     private void OnExitRequested(object? sender, EventArgs e)
     {
+        Log.Inf("Tray menu requested Exit.");
         ExitApplication();
     }
 
     private void ExitButton_OnClick(object sender, RoutedEventArgs e)
     {
+        Log.Inf("Exit button clicked.");
         ExitApplication();
     }
 
     private void OnNotificationRequested(object? sender, string message)
     {
+        Log.Inf($"User notification: {message}");
         _trayIconManager.ShowNotification("Read Selected Text TTS", message);
     }
 
@@ -145,6 +159,7 @@ public partial class MainWindow : Window
     {
         if (WindowState == WindowState.Minimized)
         {
+            Log.Dbg("MainWindow minimized; hiding to tray.");
             HideWindowToTray();
         }
     }
@@ -157,6 +172,7 @@ public partial class MainWindow : Window
         }
 
         e.Cancel = true;
+        Log.Dbg("MainWindow close intercepted; hiding to tray.");
         HideWindowToTray();
     }
 
@@ -164,15 +180,18 @@ public partial class MainWindow : Window
     {
         if (IsVisible)
         {
+            Log.Dbg("Toggle window requested: currently visible, hiding.");
             HideWindowToTray();
             return;
         }
 
+        Log.Dbg("Toggle window requested: currently hidden, showing.");
         ShowWindow();
     }
 
     private void ShowWindow()
     {
+        Log.Dbg("Showing main window.");
         Show();
         ShowInTaskbar = true;
         WindowState = WindowState.Normal;
@@ -182,6 +201,7 @@ public partial class MainWindow : Window
 
     private void HideWindowToTray()
     {
+        Log.Dbg("Hiding main window to tray.");
         Hide();
         ShowInTaskbar = false;
         _trayIconManager.SetWindowVisible(false);
@@ -189,6 +209,7 @@ public partial class MainWindow : Window
 
     private void ExitApplication()
     {
+        Log.Inf("ExitApplication invoked.");
         _isExiting = true;
 
         _globalHotkey?.Dispose();
