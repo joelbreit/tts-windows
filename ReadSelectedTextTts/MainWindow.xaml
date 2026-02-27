@@ -5,10 +5,10 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         mc:Ignorable="d"
         Title="Read Selected Text TTS"
-        Height="300"
-        Width="460"
-        MinHeight="280"
-        MinWidth="420"
+        Height="460"
+        Width="520"
+        MinHeight="440"
+        MinWidth="480"
         WindowStartupLocation="CenterScreen">
     <Grid Margin="16">
         <Grid.RowDefinitions>
@@ -17,9 +17,11 @@
             <RowDefinition Height="Auto" />
             <RowDefinition Height="8" />
             <RowDefinition Height="Auto" />
-            <RowDefinition Height="20" />
+            <RowDefinition Height="12" />
             <RowDefinition Height="Auto" />
-            <RowDefinition Height="16" />
+            <RowDefinition Height="12" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="12" />
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
@@ -64,21 +66,37 @@
                    FontWeight="SemiBold"
                    HorizontalAlignment="Center" />
 
-        <UniformGrid Grid.Row="8"
+        <StackPanel Grid.Row="8">
+            <TextBlock Margin="0,0,0,6"
+                       Text="Test Text" />
+            <TextBox Text="{Binding ManualText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                     AcceptsReturn="True"
+                     VerticalScrollBarVisibility="Auto"
+                     TextWrapping="Wrap"
+                     Height="120" />
+        </StackPanel>
+
+        <UniformGrid Grid.Row="10"
                      Rows="1"
-                     Columns="4"
+                     Columns="6"
                      HorizontalAlignment="Stretch">
             <Button Margin="0,0,8,0"
                     Content="Read Selection"
                     Command="{Binding ReadSelectionCommand}" />
+            <Button Margin="0,0,8,0"
+                    Content="Read Test Text"
+                    Command="{Binding ReadTestTextCommand}" />
             <Button Margin="0,0,8,0"
                     Content="Pause"
                     Command="{Binding PauseCommand}" />
             <Button Margin="0,0,8,0"
                     Content="Resume"
                     Command="{Binding ResumeCommand}" />
-            <Button Content="Stop"
+            <Button Margin="0,0,8,0"
+                    Content="Stop"
                     Command="{Binding StopCommand}" />
+            <Button Content="Exit"
+                    Click="ExitButton_OnClick" />
         </UniformGrid>
     </Grid>
 </Window>

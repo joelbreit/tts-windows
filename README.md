@@ -22,6 +22,7 @@ dotnet run --project .\ReadSelectedTextTts\ReadSelectedTextTts.csproj
 ## Usage
 
 - Global hotkey: `Win + Alt + R`
+  - If unavailable on your system (common due OS shortcuts), the app falls back to `Ctrl + Alt + R`.
 - Tray menu:
   - `Read Selection`
   - `Show/Hide`
@@ -29,7 +30,8 @@ dotnet run --project .\ReadSelectedTextTts\ReadSelectedTextTts.csproj
 - Window controls:
   - Voice dropdown (prefers `(Natural)` voice by default when available)
   - Speed slider and `-0.1` / `+0.1` buttons (`0.1x` to `4.0x`)
-  - `Read Selection`, `Pause`, `Resume`, `Stop`
+  - `Read Selection`, `Read Test Text`, `Pause`, `Resume`, `Stop`, `Exit`
+  - Built-in `Test Text` box for local playback verification without selecting text in another app
 
 ## Persistence
 

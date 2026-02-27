@@ -18,6 +18,9 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     private AppSettings _settings = new();
     private VoiceOption? _selectedVoice;
     private double _speed = 1.0;
+    private string _manualText = "This is a test sentence from Read Selected Text TTS.";
+    private uint _activeHotkeyModifiers;
+    private uint _activeHotkeyKey;
     private bool _isPlaying;
     private bool _isPaused;
     private bool _disposed;
@@ -30,6 +33,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         _selectionReader = selectionReader;
         _ttsService = ttsService;
         _settingsService = settingsService;
+        _activeHotkeyModifiers = _settings.HotkeyModifiers;
+        _activeHotkeyKey = _settings.HotkeyKey;
 
         _ttsService.PlaybackStateChanged += OnPlaybackStateChanged;
 
@@ -37,6 +42,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         PauseCommand = new RelayCommand(Pause, () => IsPlaying && !IsPaused);
         ResumeCommand = new RelayCommand(Resume, () => IsPlaying && IsPaused);
         StopCommand = new RelayCommand(Stop, () => IsPlaying);
+        ReadTestTextCommand = new AsyncRelayCommand(ReadManualTextAsync, () => SelectedVoice is not null && !string.IsNullOrWhiteSpace(ManualText));
         IncreaseSpeedCommand = new RelayCommand(IncreaseSpeed, () => Speed < 4.0);
         DecreaseSpeedCommand = new RelayCommand(DecreaseSpeed, () => Speed > 0.1);
     }
@@ -52,6 +58,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     public ICommand ResumeCommand { get; }
 
     public ICommand StopCommand { get; }
+
+    public ICommand ReadTestTextCommand { get; }
 
     public ICommand IncreaseSpeedCommand { get; }
 
@@ -93,6 +101,20 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
     public string SpeedDisplay => $"{Speed:F1}x";
 
+    public string ManualText
+    {
+        get => _manualText;
+        set
+        {
+            if (!SetProperty(ref _manualText, value))
+            {
+                return;
+            }
+
+            RaiseCommandCanExecuteChanged();
+        }
+    }
+
     public bool IsPlaying
     {
         get => _isPlaying;
@@ -121,12 +143,14 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
     public uint HotkeyKey => _settings.HotkeyKey;
 
-    public string HotkeyDisplay => $"Hotkey: {FormatHotkey(_settings.HotkeyModifiers, _settings.HotkeyKey)}";
+    public string HotkeyDisplay => $"Hotkey: {FormatHotkey(_activeHotkeyModifiers, _activeHotkeyKey)}";
 
     public async Task InitializeAsync()
     {
         _settings = await _settingsService.LoadAsync();
         NormalizeSettings();
+        _activeHotkeyModifiers = _settings.HotkeyModifiers;
+        _activeHotkeyKey = _settings.HotkeyKey;
 
         Speed = _settings.Speed;
 
@@ -161,7 +185,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             var selectedText = await _selectionReader.ReadSelectionAsync();
             if (string.IsNullOrWhiteSpace(selectedText))
             {
-                NotificationRequested?.Invoke(this, "No selected text found.");
+                NotificationRequested?.Invoke(this, "No selected text found. Select text in another app or use Read Test Text.");
                 return;
             }
 
@@ -189,6 +213,22 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         GC.SuppressFinalize(this);
     }
 
+    public void SetActiveHotkey(uint modifiers, uint key, bool persist)
+    {
+        _activeHotkeyModifiers = modifiers;
+        _activeHotkeyKey = key;
+        OnPropertyChanged(nameof(HotkeyDisplay));
+
+        if (!persist)
+        {
+            return;
+        }
+
+        _settings.HotkeyModifiers = modifiers;
+        _settings.HotkeyKey = key;
+        SaveSettingsFireAndForget();
+    }
+
     private void Pause()
     {
         _ttsService.Pause();
@@ -208,6 +248,32 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         _ttsService.Stop();
         IsPlaying = _ttsService.IsPlaying;
         IsPaused = _ttsService.IsPaused;
+    }
+
+    private async Task ReadManualTextAsync()
+    {
+        if (SelectedVoice is null)
+        {
+            NotificationRequested?.Invoke(this, "No Windows voices installed.");
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(ManualText))
+        {
+            NotificationRequested?.Invoke(this, "Enter test text first.");
+            return;
+        }
+
+        try
+        {
+            await _ttsService.SpeakAsync(ManualText, SelectedVoice.Voice, Speed);
+            IsPlaying = _ttsService.IsPlaying;
+            IsPaused = _ttsService.IsPaused;
+        }
+        catch (Exception ex)
+        {
+            NotificationRequested?.Invoke(this, $"Read failed: {ex.Message}");
+        }
     }
 
     private void IncreaseSpeed()
@@ -310,6 +376,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         (PauseCommand as RelayCommand)?.RaiseCanExecuteChanged();
         (ResumeCommand as RelayCommand)?.RaiseCanExecuteChanged();
         (StopCommand as RelayCommand)?.RaiseCanExecuteChanged();
+        (ReadTestTextCommand as AsyncRelayCommand)?.RaiseCanExecuteChanged();
         (IncreaseSpeedCommand as RelayCommand)?.RaiseCanExecuteChanged();
         (DecreaseSpeedCommand as RelayCommand)?.RaiseCanExecuteChanged();
     }
