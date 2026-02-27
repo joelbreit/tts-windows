@@ -1,0 +1,84 @@
+<Window x:Class="ReadSelectedTextTts.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        mc:Ignorable="d"
+        Title="Read Selected Text TTS"
+        Height="300"
+        Width="460"
+        MinHeight="280"
+        MinWidth="420"
+        WindowStartupLocation="CenterScreen">
+    <Grid Margin="16">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="12" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="8" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="20" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="16" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <TextBlock Grid.Row="0"
+                   Text="{Binding HotkeyDisplay}"
+                   FontSize="12"
+                   Foreground="#4A5568" />
+
+        <StackPanel Grid.Row="2">
+            <TextBlock Margin="0,0,0,6"
+                       Text="Voice" />
+            <ComboBox ItemsSource="{Binding Voices}"
+                      SelectedItem="{Binding SelectedVoice, Mode=TwoWay}"
+                      DisplayMemberPath="DisplayName"
+                      MinWidth="320" />
+        </StackPanel>
+
+        <StackPanel Grid.Row="4">
+            <TextBlock Margin="0,0,0,6"
+                       Text="Playback Speed" />
+            <DockPanel>
+                <Button Content="-0.1"
+                        Width="56"
+                        Margin="0,0,8,0"
+                        Command="{Binding DecreaseSpeedCommand}" />
+                <Slider Minimum="0.1"
+                        Maximum="4.0"
+                        TickFrequency="0.1"
+                        IsSnapToTickEnabled="True"
+                        Value="{Binding Speed, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                        VerticalAlignment="Center"
+                        Margin="0,0,8,0" />
+                <Button Content="+0.1"
+                        Width="56"
+                        Command="{Binding IncreaseSpeedCommand}" />
+            </DockPanel>
+        </StackPanel>
+
+        <TextBlock Grid.Row="6"
+                   Text="{Binding SpeedDisplay}"
+                   FontSize="16"
+                   FontWeight="SemiBold"
+                   HorizontalAlignment="Center" />
+
+        <UniformGrid Grid.Row="8"
+                     Rows="1"
+                     Columns="4"
+                     HorizontalAlignment="Stretch">
+            <Button Margin="0,0,8,0"
+                    Content="Read Selection"
+                    Command="{Binding ReadSelectionCommand}" />
+            <Button Margin="0,0,8,0"
+                    Content="Pause"
+                    Command="{Binding PauseCommand}" />
+            <Button Margin="0,0,8,0"
+                    Content="Resume"
+                    Command="{Binding ResumeCommand}" />
+            <Button Content="Stop"
+                    Command="{Binding StopCommand}" />
+        </UniformGrid>
+    </Grid>
+</Window>
