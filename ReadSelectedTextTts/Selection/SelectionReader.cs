@@ -489,7 +489,24 @@ public sealed class SelectionReader
     private struct InputUnion
     {
         [FieldOffset(0)]
+        public MOUSEINPUT mi;
+
+        [FieldOffset(0)]
         public KEYBDINPUT ki;
+
+        [FieldOffset(0)]
+        public HARDWAREINPUT hi;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct MOUSEINPUT
+    {
+        public int dx;
+        public int dy;
+        public uint mouseData;
+        public uint dwFlags;
+        public uint time;
+        public nuint dwExtraInfo;
     }
 
     [StructLayout(LayoutKind.Sequential)]
@@ -500,6 +517,14 @@ public sealed class SelectionReader
         public uint dwFlags;
         public uint time;
         public nuint dwExtraInfo;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct HARDWAREINPUT
+    {
+        public uint uMsg;
+        public ushort wParamL;
+        public ushort wParamH;
     }
 
     [DllImport("user32.dll")]
