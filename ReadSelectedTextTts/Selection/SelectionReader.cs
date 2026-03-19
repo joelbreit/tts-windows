@@ -14,6 +14,29 @@ public sealed class SelectionReader
     private const ushort VkC = 0x43;
     private static int _attemptCounter;
 
+    public string ReadClipboardText()
+    {
+        var attemptId = Interlocked.Increment(ref _attemptCounter);
+        Log.Inf($"Clipboard read attempt #{attemptId} started.");
+
+        if (!TryGetClipboardText(out var text, attemptId))
+        {
+            Log.Wrn($"Clipboard read attempt #{attemptId}: Unable to read clipboard text.");
+            return string.Empty;
+        }
+
+        var trimmed = text.Trim();
+        if (string.IsNullOrWhiteSpace(trimmed))
+        {
+            Log.Wrn($"Clipboard read attempt #{attemptId}: Clipboard text was empty.");
+            return string.Empty;
+        }
+
+        Log.Inf(
+            $"Clipboard read attempt #{attemptId}: Success. Length={trimmed.Length}, Preview='{Preview(trimmed)}'");
+        return trimmed;
+    }
+
     public async Task<string> ReadSelectionAsync(CancellationToken cancellationToken = default)
     {
         var attemptId = Interlocked.Increment(ref _attemptCounter);
@@ -234,7 +257,7 @@ public sealed class SelectionReader
         {
             SendCopyShortcut(attemptId);
 
-            var stopAt = DateTime.UtcNow.AddMilliseconds(500);
+            var stopAt = DateTime.UtcNow.AddMilliseconds(1500);
             var poll = 0;
             while (DateTime.UtcNow < stopAt)
             {

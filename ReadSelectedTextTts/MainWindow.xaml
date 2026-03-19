@@ -78,11 +78,14 @@
 
         <UniformGrid Grid.Row="10"
                      Rows="1"
-                     Columns="6"
+                     Columns="7"
                      HorizontalAlignment="Stretch">
             <Button Margin="0,0,8,0"
                     Content="Read Selection"
                     Command="{Binding ReadSelectionCommand}" />
+            <Button Margin="0,0,8,0"
+                    Content="Read Clipboard"
+                    Command="{Binding ReadClipboardCommand}" />
             <Button Margin="0,0,8,0"
                     Content="Read Test Text"
                     Command="{Binding ReadTestTextCommand}" />

@@ -22,6 +22,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     private string _manualText = "This is a test sentence from Read Selected Text TTS.";
     private uint _activeHotkeyModifiers;
     private uint _activeHotkeyKey;
+    private uint _activeClipboardHotkeyModifiers = 0x0009;
+    private uint _activeClipboardHotkeyKey = 0x43;
     private bool _isPlaying;
     private bool _isPaused;
     private bool _disposed;
@@ -40,6 +42,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         _ttsService.PlaybackStateChanged += OnPlaybackStateChanged;
 
         ReadSelectionCommand = new AsyncRelayCommand(ReadSelectionAsync, () => SelectedVoice is not null);
+        ReadClipboardCommand = new AsyncRelayCommand(ReadClipboardAsync, () => SelectedVoice is not null);
         PauseCommand = new RelayCommand(Pause, () => IsPlaying && !IsPaused);
         ResumeCommand = new RelayCommand(Resume, () => IsPlaying && IsPaused);
         StopCommand = new RelayCommand(Stop, () => IsPlaying);
@@ -53,6 +56,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     public ObservableCollection<VoiceOption> Voices { get; } = [];
 
     public ICommand ReadSelectionCommand { get; }
+
+    public ICommand ReadClipboardCommand { get; }
 
     public ICommand PauseCommand { get; }
 
@@ -144,7 +149,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
     public uint HotkeyKey => _settings.HotkeyKey;
 
-    public string HotkeyDisplay => $"Hotkey: {FormatHotkey(_activeHotkeyModifiers, _activeHotkeyKey)}";
+    public string HotkeyDisplay =>
+        $"Selection Hotkey: {FormatHotkey(_activeHotkeyModifiers, _activeHotkeyKey)} | Clipboard Hotkey: {FormatHotkey(_activeClipboardHotkeyModifiers, _activeClipboardHotkeyKey)}";
 
     public async Task InitializeAsync()
     {
@@ -209,6 +215,37 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         }
     }
 
+    public async Task ReadClipboardAsync()
+    {
+        if (SelectedVoice is null)
+        {
+            NotificationRequested?.Invoke(this, "No Windows voices installed.");
+            return;
+        }
+
+        try
+        {
+            Log.Dbg($"ReadClipboard requested. Active voice='{SelectedVoice.DisplayName}', speed={Speed:F1}x");
+            var clipboardText = _selectionReader.ReadClipboardText();
+            if (string.IsNullOrWhiteSpace(clipboardText))
+            {
+                Log.Wrn("ReadClipboard found no text.");
+                NotificationRequested?.Invoke(this, "Clipboard does not contain text.");
+                return;
+            }
+
+            Log.Inf($"ReadClipboard speaking text. Length={clipboardText.Length}");
+            await _ttsService.SpeakAsync(clipboardText, SelectedVoice.Voice, Speed);
+            IsPlaying = _ttsService.IsPlaying;
+            IsPaused = _ttsService.IsPaused;
+        }
+        catch (Exception ex)
+        {
+            Log.Err($"ReadClipboard failed: {ex}");
+            NotificationRequested?.Invoke(this, $"Read failed: {ex.Message}");
+        }
+    }
+
     public void Dispose()
     {
         if (_disposed)
@@ -239,6 +276,14 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         _settings.HotkeyModifiers = modifiers;
         _settings.HotkeyKey = key;
         SaveSettingsFireAndForget();
+    }
+
+    public void SetActiveClipboardHotkey(uint modifiers, uint key)
+    {
+        _activeClipboardHotkeyModifiers = modifiers;
+        _activeClipboardHotkeyKey = key;
+        Log.Inf($"Active clipboard hotkey set to {FormatHotkey(modifiers, key)}");
+        OnPropertyChanged(nameof(HotkeyDisplay));
     }
 
     private void Pause()
@@ -387,6 +432,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     private void RaiseCommandCanExecuteChanged()
     {
         (ReadSelectionCommand as AsyncRelayCommand)?.RaiseCanExecuteChanged();
+        (ReadClipboardCommand as AsyncRelayCommand)?.RaiseCanExecuteChanged();
         (PauseCommand as RelayCommand)?.RaiseCanExecuteChanged();
         (ResumeCommand as RelayCommand)?.RaiseCanExecuteChanged();
         (StopCommand as RelayCommand)?.RaiseCanExecuteChanged();

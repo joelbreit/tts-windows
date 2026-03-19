@@ -15,6 +15,10 @@ public sealed class TrayIconManager : IDisposable
         readSelectionMenuItem.Click += (_, _) => ReadSelectionRequested?.Invoke(this, EventArgs.Empty);
         menu.Items.Add(readSelectionMenuItem);
 
+        var readClipboardMenuItem = new Forms.ToolStripMenuItem("Read Clipboard");
+        readClipboardMenuItem.Click += (_, _) => ReadClipboardRequested?.Invoke(this, EventArgs.Empty);
+        menu.Items.Add(readClipboardMenuItem);
+
         _toggleWindowMenuItem = new Forms.ToolStripMenuItem("Show");
         _toggleWindowMenuItem.Click += (_, _) => ToggleWindowRequested?.Invoke(this, EventArgs.Empty);
         menu.Items.Add(_toggleWindowMenuItem);
@@ -37,6 +41,8 @@ public sealed class TrayIconManager : IDisposable
     }
 
     public event EventHandler? ReadSelectionRequested;
+
+    public event EventHandler? ReadClipboardRequested;
 
     public event EventHandler? ToggleWindowRequested;
 

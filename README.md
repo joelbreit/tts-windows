@@ -38,14 +38,17 @@ dotnet run --project .\ReadSelectedTextTts\ReadSelectedTextTts.csproj
 
 - Global hotkey: `Win + Alt + R`
   - If unavailable on your system (common due OS shortcuts), the app falls back to `Ctrl + Alt + R`.
+- Global clipboard hotkey: `Win + Alt + C`
+  - If unavailable on your system, the app falls back to `Ctrl + Alt + C`.
 - Tray menu:
   - `Read Selection`
+  - `Read Clipboard`
   - `Show/Hide`
   - `Exit`
 - Window controls:
   - Voice dropdown (prefers `(Natural)` voice by default when available)
   - Speed slider and `-0.1` / `+0.1` buttons (`0.1x` to `4.0x`)
-  - `Read Selection`, `Read Test Text`, `Pause`, `Resume`, `Stop`, `Exit`
+  - `Read Selection`, `Read Clipboard`, `Read Test Text`, `Pause`, `Resume`, `Stop`, `Exit`
   - Built-in `Test Text` box for local playback verification without selecting text in another app
 
 ## Persistence
@@ -70,3 +73,4 @@ dotnet run --project .\ReadSelectedTextTts\ReadSelectedTextTts.csproj
 4. Change playback speed and confirm audible rate changes.
 5. Disconnect network and confirm the app still works offline.
 6. Copy text to clipboard, run `Read Selection`, then paste to confirm clipboard content is restored.
+7. Copy text to clipboard -> press `Win+Alt+C` -> app reads clipboard text without changing clipboard content.

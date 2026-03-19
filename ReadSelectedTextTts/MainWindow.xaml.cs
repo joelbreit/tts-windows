@@ -13,16 +13,26 @@ namespace ReadSelectedTextTts;
 
 public partial class MainWindow : Window
 {
-    private static readonly (HotkeyModifiers Modifiers, uint Key)[] HotkeyFallbacks =
+    private static readonly (HotkeyModifiers Modifiers, uint Key)[] SelectionHotkeyFallbacks =
     [
         (HotkeyModifiers.Control | HotkeyModifiers.Alt, 0x52),
         (HotkeyModifiers.Control | HotkeyModifiers.Shift, 0x52),
         (HotkeyModifiers.Alt, 0x52)
     ];
+    private static readonly (HotkeyModifiers Modifiers, uint Key)[] ClipboardHotkeyFallbacks =
+    [
+        (HotkeyModifiers.Control | HotkeyModifiers.Alt, 0x43),
+        (HotkeyModifiers.Control | HotkeyModifiers.Shift, 0x43),
+        (HotkeyModifiers.Alt, 0x43)
+    ];
+    private static readonly (HotkeyModifiers Modifiers, uint Key) ClipboardDefaultHotkey =
+        (HotkeyModifiers.Win | HotkeyModifiers.Alt, 0x43);
 
     private readonly MainViewModel _viewModel;
     private readonly TrayIconManager _trayIconManager;
-    private GlobalHotkey? _globalHotkey;
+    private GlobalHotkey? _selectionHotkey;
+    private GlobalHotkey? _clipboardHotkey;
+    private (HotkeyModifiers Modifiers, uint Key)? _activeSelectionHotkey;
     private bool _isExiting;
     private bool _initialized;
 
@@ -40,6 +50,7 @@ public partial class MainWindow : Window
 
         _trayIconManager = new TrayIconManager();
         _trayIconManager.ReadSelectionRequested += OnReadSelectionRequested;
+        _trayIconManager.ReadClipboardRequested += OnReadClipboardRequested;
         _trayIconManager.ToggleWindowRequested += OnToggleWindowRequested;
         _trayIconManager.ExitRequested += OnExitRequested;
 
@@ -59,35 +70,44 @@ public partial class MainWindow : Window
         }
 
         _initialized = true;
-        Log.Inf("MainWindow loaded. Initializing view model and hotkey.");
+        Log.Inf("MainWindow loaded. Initializing view model and hotkeys.");
 
         await _viewModel.InitializeAsync();
-        RegisterHotkey();
+        RegisterHotkeys();
         _trayIconManager.SetWindowVisible(true);
     }
 
-    private void RegisterHotkey()
+    private void RegisterHotkeys()
     {
-        Log.Dbg("Registering global hotkey.");
-        _globalHotkey?.Dispose();
-        _globalHotkey = null;
+        Log.Dbg("Registering global hotkeys.");
+        RegisterSelectionHotkey();
+        RegisterClipboardHotkey();
+    }
+
+    private void RegisterSelectionHotkey()
+    {
+        _selectionHotkey?.Dispose();
+        _selectionHotkey = null;
+        _activeSelectionHotkey = null;
 
         var configured = ((HotkeyModifiers)_viewModel.HotkeyModifiers, _viewModel.HotkeyKey);
-        if (TryRegisterHotkeyCandidate(configured.Item1, configured.Item2))
+        if (TryRegisterHotkeyCandidate(configured.Item1, configured.Item2, OnSelectionHotkeyPressed, out var configuredHotkey))
         {
             Log.Inf($"Registered configured hotkey: {FormatHotkey((uint)configured.Item1, configured.Item2)}");
             _viewModel.SetActiveHotkey((uint)configured.Item1, configured.Item2, persist: false);
+            _selectionHotkey = configuredHotkey;
+            _activeSelectionHotkey = configured;
             return;
         }
 
-        foreach (var fallback in HotkeyFallbacks)
+        foreach (var fallback in SelectionHotkeyFallbacks)
         {
             if (fallback.Modifiers == configured.Item1 && fallback.Key == configured.Item2)
             {
                 continue;
             }
 
-            if (!TryRegisterHotkeyCandidate(fallback.Modifiers, fallback.Key))
+            if (!TryRegisterHotkeyCandidate(fallback.Modifiers, fallback.Key, OnSelectionHotkeyPressed, out var fallbackHotkey))
             {
                 Log.Dbg($"Hotkey candidate failed: {FormatHotkey((uint)fallback.Modifiers, fallback.Key)}");
                 continue;
@@ -95,6 +115,8 @@ public partial class MainWindow : Window
 
             Log.Wrn($"Configured hotkey unavailable. Falling back to {FormatHotkey((uint)fallback.Modifiers, fallback.Key)}");
             _viewModel.SetActiveHotkey((uint)fallback.Modifiers, fallback.Key, persist: true);
+            _selectionHotkey = fallbackHotkey;
+            _activeSelectionHotkey = fallback;
             _trayIconManager.ShowNotification(
                 "Read Selected Text TTS",
                 $"Configured hotkey unavailable. Using {FormatHotkey((uint)fallback.Modifiers, fallback.Key)}.");
@@ -105,31 +127,105 @@ public partial class MainWindow : Window
         _trayIconManager.ShowNotification("Read Selected Text TTS", "Unable to register any global hotkey.");
     }
 
-    private bool TryRegisterHotkeyCandidate(HotkeyModifiers modifiers, uint key)
+    private void RegisterClipboardHotkey()
+    {
+        _clipboardHotkey?.Dispose();
+        _clipboardHotkey = null;
+
+        if (!IsSelectionHotkey(ClipboardDefaultHotkey.Modifiers, ClipboardDefaultHotkey.Key) &&
+            TryRegisterHotkeyCandidate(
+                ClipboardDefaultHotkey.Modifiers,
+                ClipboardDefaultHotkey.Key,
+                OnClipboardHotkeyPressed,
+                out var configuredHotkey))
+        {
+            Log.Inf(
+                $"Registered clipboard hotkey: {FormatHotkey((uint)ClipboardDefaultHotkey.Modifiers, ClipboardDefaultHotkey.Key)}");
+            _clipboardHotkey = configuredHotkey;
+            _viewModel.SetActiveClipboardHotkey((uint)ClipboardDefaultHotkey.Modifiers, ClipboardDefaultHotkey.Key);
+            return;
+        }
+
+        foreach (var fallback in ClipboardHotkeyFallbacks)
+        {
+            if (fallback.Modifiers == ClipboardDefaultHotkey.Modifiers && fallback.Key == ClipboardDefaultHotkey.Key)
+            {
+                continue;
+            }
+
+            if (IsSelectionHotkey(fallback.Modifiers, fallback.Key))
+            {
+                Log.Dbg($"Skipping clipboard hotkey candidate due to selection conflict: {FormatHotkey((uint)fallback.Modifiers, fallback.Key)}");
+                continue;
+            }
+
+            if (!TryRegisterHotkeyCandidate(fallback.Modifiers, fallback.Key, OnClipboardHotkeyPressed, out var fallbackHotkey))
+            {
+                Log.Dbg($"Clipboard hotkey candidate failed: {FormatHotkey((uint)fallback.Modifiers, fallback.Key)}");
+                continue;
+            }
+
+            Log.Wrn(
+                $"Configured clipboard hotkey unavailable. Falling back to {FormatHotkey((uint)fallback.Modifiers, fallback.Key)}");
+            _clipboardHotkey = fallbackHotkey;
+            _viewModel.SetActiveClipboardHotkey((uint)fallback.Modifiers, fallback.Key);
+            _trayIconManager.ShowNotification(
+                "Read Selected Text TTS",
+                $"Clipboard hotkey unavailable. Using {FormatHotkey((uint)fallback.Modifiers, fallback.Key)}.");
+            return;
+        }
+
+        Log.Wrn("Unable to register clipboard hotkey.");
+        _trayIconManager.ShowNotification("Read Selected Text TTS", "Unable to register clipboard hotkey.");
+    }
+
+    private bool TryRegisterHotkeyCandidate(
+        HotkeyModifiers modifiers,
+        uint key,
+        EventHandler handler,
+        out GlobalHotkey? registeredHotkey)
     {
         var candidate = new GlobalHotkey(modifiers, key);
         if (!candidate.Register(this))
         {
             candidate.Dispose();
+            registeredHotkey = null;
             return false;
         }
 
-        candidate.Pressed += OnGlobalHotkeyPressed;
-        _globalHotkey = candidate;
+        candidate.Pressed += handler;
+        registeredHotkey = candidate;
         return true;
     }
 
-    private async void OnGlobalHotkeyPressed(object? sender, EventArgs e)
+    private bool IsSelectionHotkey(HotkeyModifiers modifiers, uint key)
     {
-        Log.Dbg("Global hotkey pressed.");
+        return _activeSelectionHotkey is { } active && active.Modifiers == modifiers && active.Key == key;
+    }
+
+    private async void OnSelectionHotkeyPressed(object? sender, EventArgs e)
+    {
+        Log.Dbg("Selection hotkey pressed.");
         await Task.Delay(120);
         await _viewModel.ReadSelectionAsync();
+    }
+
+    private async void OnClipboardHotkeyPressed(object? sender, EventArgs e)
+    {
+        Log.Dbg("Clipboard hotkey pressed.");
+        await _viewModel.ReadClipboardAsync();
     }
 
     private async void OnReadSelectionRequested(object? sender, EventArgs e)
     {
         Log.Dbg("Tray menu requested Read Selection.");
         await _viewModel.ReadSelectionAsync();
+    }
+
+    private async void OnReadClipboardRequested(object? sender, EventArgs e)
+    {
+        Log.Dbg("Tray menu requested Read Clipboard.");
+        await _viewModel.ReadClipboardAsync();
     }
 
     private void OnToggleWindowRequested(object? sender, EventArgs e)
@@ -212,7 +308,8 @@ public partial class MainWindow : Window
         Log.Inf("ExitApplication invoked.");
         _isExiting = true;
 
-        _globalHotkey?.Dispose();
+        _selectionHotkey?.Dispose();
+        _clipboardHotkey?.Dispose();
         _viewModel.Dispose();
         _trayIconManager.Dispose();
 
