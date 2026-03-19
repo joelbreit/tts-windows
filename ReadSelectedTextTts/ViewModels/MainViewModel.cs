@@ -152,6 +152,10 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     public string HotkeyDisplay =>
         $"Selection Hotkey: {FormatHotkey(_activeHotkeyModifiers, _activeHotkeyKey)} | Clipboard Hotkey: {FormatHotkey(_activeClipboardHotkeyModifiers, _activeClipboardHotkeyKey)}";
 
+    public string SelectionHotkeyDisplay => FormatHotkey(_activeHotkeyModifiers, _activeHotkeyKey);
+
+    public string ClipboardHotkeyDisplay => FormatHotkey(_activeClipboardHotkeyModifiers, _activeClipboardHotkeyKey);
+
     public async Task InitializeAsync()
     {
         Log.Inf("Initializing MainViewModel.");
@@ -182,6 +186,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         Log.Inf($"Selected default voice: {SelectedVoice?.DisplayName ?? "<none>"}");
         await SaveSettingsAsync();
         OnPropertyChanged(nameof(HotkeyDisplay));
+        OnPropertyChanged(nameof(SelectionHotkeyDisplay));
+        OnPropertyChanged(nameof(ClipboardHotkeyDisplay));
     }
 
     public async Task ReadSelectionAsync()
@@ -267,6 +273,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         _activeHotkeyKey = key;
         Log.Inf($"Active hotkey set to {FormatHotkey(modifiers, key)}. Persist={persist}");
         OnPropertyChanged(nameof(HotkeyDisplay));
+        OnPropertyChanged(nameof(SelectionHotkeyDisplay));
 
         if (!persist)
         {
@@ -284,6 +291,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         _activeClipboardHotkeyKey = key;
         Log.Inf($"Active clipboard hotkey set to {FormatHotkey(modifiers, key)}");
         OnPropertyChanged(nameof(HotkeyDisplay));
+        OnPropertyChanged(nameof(ClipboardHotkeyDisplay));
     }
 
     private void Pause()

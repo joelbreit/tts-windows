@@ -5,101 +5,146 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         mc:Ignorable="d"
         Title="Read Selected Text TTS"
-        Height="460"
+        Height="500"
         Width="520"
-        MinHeight="440"
+        MinHeight="460"
         MinWidth="480"
-        WindowStartupLocation="CenterScreen">
-    <Grid Margin="16">
+        WindowStartupLocation="CenterScreen"
+        Background="{StaticResource BackgroundBrush}"
+        Foreground="{StaticResource TextBrush}"
+        FontFamily="Segoe UI"
+        FontSize="13">
+    <Grid Margin="20">
         <Grid.RowDefinitions>
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="12" />
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="8" />
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="12" />
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="12" />
-            <RowDefinition Height="*" />
-            <RowDefinition Height="12" />
-            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="16"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="16"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="16"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="16"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="10"/>
+            <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
-        <TextBlock Grid.Row="0"
-                   Text="{Binding HotkeyDisplay}"
-                   FontSize="12"
-                   Foreground="#4A5568" />
+        <!-- Hotkey Badges + Playback Status -->
+        <WrapPanel Grid.Row="0" Orientation="Horizontal">
+            <Border Background="{StaticResource SurfaceBrush}" CornerRadius="4"
+                    Padding="10,5" Margin="0,0,8,0">
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock Text="Selection" Foreground="{StaticResource SubTextBrush}" FontSize="11"/>
+                    <TextBlock Text="{Binding SelectionHotkeyDisplay}"
+                               Foreground="{StaticResource AccentBrush}" FontSize="11"
+                               Margin="6,0,0,0" FontWeight="SemiBold"/>
+                </StackPanel>
+            </Border>
+            <Border Background="{StaticResource SurfaceBrush}" CornerRadius="4"
+                    Padding="10,5" Margin="0,0,8,0">
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock Text="Clipboard" Foreground="{StaticResource SubTextBrush}" FontSize="11"/>
+                    <TextBlock Text="{Binding ClipboardHotkeyDisplay}"
+                               Foreground="{StaticResource AccentBrush}" FontSize="11"
+                               Margin="6,0,0,0" FontWeight="SemiBold"/>
+                </StackPanel>
+            </Border>
+            <TextBlock VerticalAlignment="Center" Margin="4,0,0,0" FontSize="12"
+                       FontWeight="SemiBold"
+                       Visibility="{Binding IsPlaying, Converter={StaticResource BoolToVis}}">
+                <TextBlock.Style>
+                    <Style TargetType="TextBlock">
+                        <Setter Property="Foreground" Value="{StaticResource PlayingBrush}"/>
+                        <Setter Property="Text" Value="● Playing"/>
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding IsPaused}" Value="True">
+                                <Setter Property="Foreground" Value="{StaticResource PausedBrush}"/>
+                                <Setter Property="Text" Value="● Paused"/>
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </TextBlock.Style>
+            </TextBlock>
+        </WrapPanel>
 
+        <!-- Voice -->
         <StackPanel Grid.Row="2">
-            <TextBlock Margin="0,0,0,6"
-                       Text="Voice" />
+            <TextBlock Text="Voice" FontSize="12"
+                       Foreground="{StaticResource SubTextBrush}" Margin="0,0,0,6"/>
             <ComboBox ItemsSource="{Binding Voices}"
                       SelectedItem="{Binding SelectedVoice, Mode=TwoWay}"
-                      DisplayMemberPath="DisplayName"
-                      MinWidth="320" />
+                      DisplayMemberPath="DisplayName"/>
         </StackPanel>
 
+        <!-- Playback Speed -->
         <StackPanel Grid.Row="4">
-            <TextBlock Margin="0,0,0,6"
-                       Text="Playback Speed" />
+            <DockPanel Margin="0,0,0,8">
+                <TextBlock Text="Playback Speed" FontSize="12"
+                           Foreground="{StaticResource SubTextBrush}"/>
+                <TextBlock Text="{Binding SpeedDisplay}" FontSize="14"
+                           Foreground="{StaticResource AccentBrush}" FontWeight="SemiBold"
+                           HorizontalAlignment="Right"/>
+            </DockPanel>
             <DockPanel>
-                <Button Content="-0.1"
-                        Width="56"
-                        Margin="0,0,8,0"
-                        Command="{Binding DecreaseSpeedCommand}" />
+                <Button DockPanel.Dock="Left"
+                        Content="−"
+                        Style="{StaticResource SpeedButton}"
+                        Margin="0,0,10,0"
+                        Command="{Binding DecreaseSpeedCommand}"/>
+                <Button DockPanel.Dock="Right"
+                        Content="+"
+                        Style="{StaticResource SpeedButton}"
+                        Margin="10,0,0,0"
+                        Command="{Binding IncreaseSpeedCommand}"/>
                 <Slider Minimum="0.1"
                         Maximum="4.0"
                         TickFrequency="0.1"
                         IsSnapToTickEnabled="True"
                         Value="{Binding Speed, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                        VerticalAlignment="Center"
-                        Margin="0,0,8,0" />
-                <Button Content="+0.1"
-                        Width="56"
-                        Command="{Binding IncreaseSpeedCommand}" />
+                        VerticalAlignment="Center"/>
             </DockPanel>
         </StackPanel>
 
-        <TextBlock Grid.Row="6"
-                   Text="{Binding SpeedDisplay}"
-                   FontSize="16"
-                   FontWeight="SemiBold"
-                   HorizontalAlignment="Center" />
-
-        <StackPanel Grid.Row="8">
-            <TextBlock Margin="0,0,0,6"
-                       Text="Test Text" />
+        <!-- Test Text -->
+        <DockPanel Grid.Row="6">
+            <TextBlock DockPanel.Dock="Top" Text="Test Text" FontSize="12"
+                       Foreground="{StaticResource SubTextBrush}" Margin="0,0,0,6"/>
             <TextBox Text="{Binding ManualText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                      AcceptsReturn="True"
                      VerticalScrollBarVisibility="Auto"
-                     TextWrapping="Wrap"
-                     Height="120" />
-        </StackPanel>
+                     TextWrapping="Wrap"/>
+        </DockPanel>
 
-        <UniformGrid Grid.Row="10"
-                     Rows="1"
-                     Columns="7"
-                     HorizontalAlignment="Stretch">
-            <Button Margin="0,0,8,0"
-                    Content="Read Selection"
-                    Command="{Binding ReadSelectionCommand}" />
-            <Button Margin="0,0,8,0"
-                    Content="Read Clipboard"
-                    Command="{Binding ReadClipboardCommand}" />
-            <Button Margin="0,0,8,0"
-                    Content="Read Test Text"
-                    Command="{Binding ReadTestTextCommand}" />
-            <Button Margin="0,0,8,0"
-                    Content="Pause"
-                    Command="{Binding PauseCommand}" />
-            <Button Margin="0,0,8,0"
-                    Content="Resume"
-                    Command="{Binding ResumeCommand}" />
-            <Button Margin="0,0,8,0"
-                    Content="Stop"
-                    Command="{Binding StopCommand}" />
-            <Button Content="Exit"
-                    Click="ExitButton_OnClick" />
+        <!-- Read Actions -->
+        <UniformGrid Grid.Row="8" Columns="3">
+            <Button Content="Read Selection"
+                    Style="{StaticResource PrimaryButton}"
+                    Margin="0,0,5,0"
+                    Command="{Binding ReadSelectionCommand}"/>
+            <Button Content="Read Clipboard"
+                    Style="{StaticResource PrimaryButton}"
+                    Margin="5,0,5,0"
+                    Command="{Binding ReadClipboardCommand}"/>
+            <Button Content="Read Test"
+                    Style="{StaticResource PrimaryButton}"
+                    Margin="5,0,0,0"
+                    Command="{Binding ReadTestTextCommand}"/>
         </UniformGrid>
+
+        <!-- Playback Controls + Exit -->
+        <DockPanel Grid.Row="10">
+            <Button DockPanel.Dock="Right"
+                    Content="Exit"
+                    Style="{StaticResource DangerButton}"
+                    Click="ExitButton_OnClick"/>
+            <StackPanel Orientation="Horizontal">
+                <Button Content="Pause" Margin="0,0,6,0" Padding="16,8"
+                        Command="{Binding PauseCommand}"/>
+                <Button Content="Resume" Margin="0,0,6,0" Padding="16,8"
+                        Command="{Binding ResumeCommand}"/>
+                <Button Content="Stop" Padding="16,8"
+                        Command="{Binding StopCommand}"/>
+            </StackPanel>
+        </DockPanel>
     </Grid>
 </Window>

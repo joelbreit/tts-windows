@@ -1,5 +1,7 @@
 using System.ComponentModel;
+using System.Runtime.InteropServices;
 using System.Windows;
+using System.Windows.Interop;
 using Windows.System;
 using ReadSelectedTextTts.Hotkeys;
 using ReadSelectedTextTts.Selection;
@@ -27,6 +29,11 @@ public partial class MainWindow : Window
     ];
     private static readonly (HotkeyModifiers Modifiers, uint Key) ClipboardDefaultHotkey =
         (HotkeyModifiers.Win | HotkeyModifiers.Alt, 0x43);
+
+    private const int DwmwaUseImmersiveDarkMode = 20;
+
+    [DllImport("dwmapi.dll")]
+    private static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int attrValue, int attrSize);
 
     private readonly MainViewModel _viewModel;
     private readonly TrayIconManager _trayIconManager;
@@ -70,6 +77,7 @@ public partial class MainWindow : Window
         }
 
         _initialized = true;
+        ApplyDarkTitleBar();
         Log.Inf("MainWindow loaded. Initializing view model and hotkeys.");
 
         await _viewModel.InitializeAsync();
@@ -314,6 +322,18 @@ public partial class MainWindow : Window
         _trayIconManager.Dispose();
 
         System.Windows.Application.Current.Shutdown();
+    }
+
+    private void ApplyDarkTitleBar()
+    {
+        var hwnd = new WindowInteropHelper(this).Handle;
+        if (hwnd == IntPtr.Zero)
+        {
+            return;
+        }
+
+        var darkMode = 1;
+        DwmSetWindowAttribute(hwnd, DwmwaUseImmersiveDarkMode, ref darkMode, sizeof(int));
     }
 
     private static string FormatHotkey(uint modifiers, uint key)
