@@ -11,6 +11,10 @@ public sealed class SelectionReader
     private const uint InputKeyboard = 1;
     private const uint KeyEventfKeyUp = 0x0002;
     private const ushort VkControl = 0x11;
+    private const ushort VkAlt = 0x12;
+    private const ushort VkShift = 0x10;
+    private const ushort VkLWin = 0x5B;
+    private const ushort VkRWin = 0x5C;
     private const ushort VkC = 0x43;
     private static int _attemptCounter;
 
@@ -408,6 +412,24 @@ public sealed class SelectionReader
 
     private static void SendCopyShortcut(int attemptId)
     {
+        var releaseInputs = new List<INPUT>();
+        if ((GetAsyncKeyState(VkControl) & 0x8000) != 0)
+            releaseInputs.Add(CreateKeyboardInput(VkControl, keyUp: true));
+        if ((GetAsyncKeyState(VkAlt) & 0x8000) != 0)
+            releaseInputs.Add(CreateKeyboardInput(VkAlt, keyUp: true));
+        if ((GetAsyncKeyState(VkShift) & 0x8000) != 0)
+            releaseInputs.Add(CreateKeyboardInput(VkShift, keyUp: true));
+        if ((GetAsyncKeyState(VkLWin) & 0x8000) != 0)
+            releaseInputs.Add(CreateKeyboardInput(VkLWin, keyUp: true));
+        if ((GetAsyncKeyState(VkRWin) & 0x8000) != 0)
+            releaseInputs.Add(CreateKeyboardInput(VkRWin, keyUp: true));
+
+        if (releaseInputs.Count > 0)
+        {
+            Log.Trc($"Selection attempt #{attemptId}: Releasing {releaseInputs.Count} held modifier key(s) before Ctrl+C.");
+            SendInput((uint)releaseInputs.Count, releaseInputs.ToArray(), Marshal.SizeOf<INPUT>());
+        }
+
         var inputs = new[]
         {
             CreateKeyboardInput(VkControl, keyUp: false),
@@ -567,4 +589,7 @@ public sealed class SelectionReader
 
     [DllImport("user32.dll")]
     private static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint lpdwProcessId);
+
+    [DllImport("user32.dll")]
+    private static extern short GetAsyncKeyState(int vKey);
 }
