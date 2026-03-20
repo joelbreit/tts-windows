@@ -5,6 +5,7 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         mc:Ignorable="d"
         Title="Read Selected Text TTS"
+        Icon="app.ico"
         Height="500"
         Width="520"
         MinHeight="460"
