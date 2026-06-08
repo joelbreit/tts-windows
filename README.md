@@ -55,10 +55,16 @@ dotnet run --project .\ReadSelectedTextTts\ReadSelectedTextTts.csproj
 ## TTS providers
 
 The app supports multiple TTS providers behind a common abstraction
-(`ITtsProvider` + `TtsProviderRegistry`). Today only the local **Windows** provider
-ships; cloud providers (Azure, OpenAI, etc.) can be added by implementing
-`ITtsProvider` and registering it — the provider dropdown, Settings UI, config
-storage, and telemetry pick it up automatically. See
+(`ITtsProvider` + `TtsProviderRegistry`). Built-in providers:
+
+- **Windows (Local)** — offline SAPI voices; zero setup/cost.
+- **Azure AI Speech (Neural)** — cloud neural voices (~300 voices); needs a Speech
+  resource key + region. The F0 free tier covers 500k chars/month. Enter the key
+  under `⚙ Settings`.
+
+More cloud providers (OpenAI, etc.) can be added by implementing `ITtsProvider`
+and registering it — the provider dropdown, Settings UI, config storage, and
+telemetry pick it up automatically. See
 [`docs/tts-options.html`](./docs/tts-options.html) for the provider shortlist.
 
 Open `⚙ Settings` to:
