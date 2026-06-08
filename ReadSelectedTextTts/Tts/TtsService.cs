@@ -1,19 +1,30 @@
+using System.Diagnostics;
 using ReadSelectedTextTts.Models;
+using ReadSelectedTextTts.Telemetry;
 using Log = Logger.Logger;
 using Windows.Media.Core;
 using Windows.Media.Playback;
-using Windows.Media.SpeechSynthesis;
+using Windows.Storage.Streams;
 
 namespace ReadSelectedTextTts.Tts;
 
+/// <summary>
+/// Playback engine. Owns the shared <see cref="MediaPlayer"/> and rate control;
+/// delegates synthesis to the active <see cref="ITtsProvider"/> (resolved per call
+/// from the voice's provider id) and records usage telemetry.
+/// </summary>
 public sealed class TtsService : IDisposable
 {
     private readonly MediaPlayer _mediaPlayer;
-    private SpeechSynthesisStream? _activeStream;
+    private readonly TtsProviderRegistry _registry;
+    private readonly TelemetryService _telemetry;
+    private IRandomAccessStream? _activeStream;
 
-    public TtsService(string appDirectoryPath)
+    public TtsService(TtsProviderRegistry registry, TelemetryService telemetry)
     {
-        Log.Inf($"Initializing TTS service. App directory: {appDirectoryPath}");
+        _registry = registry;
+        _telemetry = telemetry;
+        Log.Inf("Initializing TTS playback engine.");
         _mediaPlayer = new MediaPlayer();
 
         _mediaPlayer.MediaEnded += (_, _) =>
@@ -34,22 +45,12 @@ public sealed class TtsService : IDisposable
 
     public event EventHandler? PlaybackStateChanged;
 
-    public IReadOnlyList<VoiceOption> GetInstalledVoices()
-    {
-        // NOTE: AllVoices only ever returns the legacy SAPI voices (David, Mark, Zira).
-        // Windows 11 "Natural"/"Natural HD" voices are NOT reachable through this (or any
-        // public) API — see docs/windows-natural-voices-unavailable.md. Do not add a
-        // "(Natural)" preference here; it can never match.
-        var voices = SpeechSynthesizer.AllVoices
-            .Select(voice => new VoiceOption(voice.DisplayName, voice.Id, voice))
-            .OrderBy(voice => voice.DisplayName, StringComparer.OrdinalIgnoreCase)
-            .ToList();
-
-        Log.Inf($"Loaded {voices.Count} voice(s).");
-        return voices;
-    }
-
-    public async Task SpeakAsync(string text, VoiceInformation voice, double rate)
+    public async Task SpeakAsync(
+        string text,
+        VoiceOption voice,
+        IProviderConfig config,
+        double rate,
+        string source)
     {
         if (string.IsNullOrWhiteSpace(text))
         {
@@ -57,20 +58,48 @@ public sealed class TtsService : IDisposable
             return;
         }
 
-        Log.Dbg($"Speak request: voice='{voice.DisplayName}', textLength={text.Length}, rate={rate:F1}x");
+        var provider = _registry.GetOrDefault(voice.ProviderId);
+        Log.Dbg($"Speak request: provider='{voice.ProviderId}', voice='{voice.DisplayName}', textLength={text.Length}, rate={rate:F1}x");
         Stop();
 
-        using var synth = new SpeechSynthesizer();
-        synth.Voice = voice;
+        var usageEvent = new TtsUsageEvent
+        {
+            Timestamp = DateTimeOffset.Now,
+            ProviderId = voice.ProviderId,
+            VoiceId = voice.Id,
+            CharacterCount = text.Length,
+            Source = source,
+        };
+        var stopwatch = Stopwatch.StartNew();
 
-        _activeStream = await synth.SynthesizeTextToStreamAsync(text);
-        _mediaPlayer.Source = MediaSource.CreateFromStream(_activeStream, _activeStream.ContentType);
-        Log.Trc($"Synthesized stream. Size={_activeStream.Size}, ContentType={_activeStream.ContentType}");
+        try
+        {
+            var result = await provider.SynthesizeAsync(text, voice, config);
+            stopwatch.Stop();
+            usageEvent.SynthesisMs = stopwatch.ElapsedMilliseconds;
 
-        ApplyPlaybackRate(rate);
-        _mediaPlayer.Play();
-        UpdatePlaybackState(true, false);
-        Log.Dbg("Playback started.");
+            _activeStream = result.Stream;
+            _mediaPlayer.Source = MediaSource.CreateFromStream(result.Stream, result.ContentType);
+            Log.Trc($"Synthesized stream. Size={result.Stream.Size}, ContentType={result.ContentType}, synthMs={usageEvent.SynthesisMs}");
+
+            ApplyPlaybackRate(rate);
+            _mediaPlayer.Play();
+            UpdatePlaybackState(true, false);
+            usageEvent.Success = true;
+            Log.Dbg("Playback started.");
+        }
+        catch (Exception ex)
+        {
+            stopwatch.Stop();
+            usageEvent.SynthesisMs = stopwatch.ElapsedMilliseconds;
+            usageEvent.Success = false;
+            usageEvent.Error = ex.Message;
+            throw;
+        }
+        finally
+        {
+            _ = _telemetry.RecordAsync(usageEvent);
+        }
     }
 
     public void Pause()
@@ -113,7 +142,7 @@ public sealed class TtsService : IDisposable
 
     public void Dispose()
     {
-        Log.Inf("Disposing TTS service.");
+        Log.Inf("Disposing TTS playback engine.");
         Stop();
         _mediaPlayer.Dispose();
         GC.SuppressFinalize(this);

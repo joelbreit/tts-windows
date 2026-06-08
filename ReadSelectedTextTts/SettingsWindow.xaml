@@ -1,0 +1,248 @@
+<Window x:Class="ReadSelectedTextTts.SettingsWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        mc:Ignorable="d"
+        Title="TTS Settings"
+        Icon="app.ico"
+        Height="640"
+        Width="760"
+        MinHeight="560"
+        MinWidth="700"
+        WindowStartupLocation="CenterOwner"
+        Background="{StaticResource BackgroundBrush}"
+        Foreground="{StaticResource TextBrush}"
+        FontFamily="Segoe UI"
+        FontSize="13">
+    <Window.Resources>
+        <!-- Provider list styling to match the dark theme -->
+        <Style TargetType="ListBox">
+            <Setter Property="Background" Value="{StaticResource InputBrush}"/>
+            <Setter Property="BorderBrush" Value="{StaticResource BorderBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Foreground" Value="{StaticResource TextBrush}"/>
+            <Setter Property="Padding" Value="4"/>
+        </Style>
+        <Style TargetType="ListBoxItem">
+            <Setter Property="Foreground" Value="{StaticResource TextBrush}"/>
+            <Setter Property="SnapsToDevicePixels" Value="True"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ListBoxItem">
+                        <Border x:Name="Bd" Padding="10,8" CornerRadius="5" Margin="0,1"
+                                Background="Transparent">
+                            <ContentPresenter/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{StaticResource ButtonHoverBrush}"/>
+                            </Trigger>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{StaticResource AccentPressedBrush}"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <Style x:Key="MetaLabel" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{StaticResource SubTextBrush}"/>
+            <Setter Property="FontSize" Value="11"/>
+        </Style>
+        <Style x:Key="MetaValue" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{StaticResource TextBrush}"/>
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Margin" Value="0,0,0,2"/>
+        </Style>
+    </Window.Resources>
+
+    <Grid Margin="18">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="14"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="14"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="12"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- Header -->
+        <StackPanel Grid.Row="0">
+            <TextBlock Text="TTS Settings" FontSize="20" FontWeight="Bold"/>
+            <TextBlock Text="Choose a provider, configure credentials, and set your machine default."
+                       Foreground="{StaticResource SubTextBrush}" Margin="0,2,0,0"/>
+        </StackPanel>
+
+        <!-- Provider list + details -->
+        <Grid Grid.Row="2">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="220"/>
+                <ColumnDefinition Width="16"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+
+            <!-- Provider list -->
+            <DockPanel Grid.Column="0">
+                <TextBlock DockPanel.Dock="Top" Text="PROVIDERS" Style="{StaticResource MetaLabel}"
+                           Margin="2,0,0,6"/>
+                <ListBox ItemsSource="{Binding Providers}"
+                         SelectedItem="{Binding SelectedProvider, Mode=TwoWay}">
+                    <ListBox.ItemTemplate>
+                        <DataTemplate>
+                            <StackPanel>
+                                <TextBlock Text="{Binding DisplayName}" FontWeight="SemiBold"/>
+                                <TextBlock Text="{Binding StatusLabel}" Style="{StaticResource MetaLabel}"/>
+                            </StackPanel>
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
+                </ListBox>
+            </DockPanel>
+
+            <!-- Provider details -->
+            <Border Grid.Column="2" Background="{StaticResource SurfaceBrush}" CornerRadius="8" Padding="18">
+                <ScrollViewer VerticalScrollBarVisibility="Auto"
+                              DataContext="{Binding SelectedProvider}">
+                    <StackPanel>
+                        <TextBlock Text="{Binding DisplayName}" FontSize="17" FontWeight="Bold"/>
+                        <TextBlock Text="{Binding Summary}" TextWrapping="Wrap"
+                                   Foreground="{StaticResource SubTextBrush}" Margin="0,6,0,0"/>
+
+                        <!-- Metadata grid -->
+                        <UniformGrid Columns="2" Margin="0,16,0,0">
+                            <StackPanel Margin="0,0,0,10">
+                                <TextBlock Text="QUALITY" Style="{StaticResource MetaLabel}"/>
+                                <TextBlock Text="{Binding Quality}" Style="{StaticResource MetaValue}"/>
+                            </StackPanel>
+                            <StackPanel Margin="0,0,0,10">
+                                <TextBlock Text="LATENCY" Style="{StaticResource MetaLabel}"/>
+                                <TextBlock Text="{Binding Latency}" Style="{StaticResource MetaValue}"/>
+                            </StackPanel>
+                            <StackPanel Margin="0,0,0,10">
+                                <TextBlock Text="COST" Style="{StaticResource MetaLabel}"/>
+                                <TextBlock Text="{Binding Cost}" Style="{StaticResource MetaValue}"/>
+                            </StackPanel>
+                            <StackPanel Margin="0,0,0,10">
+                                <TextBlock Text="FREE TIER" Style="{StaticResource MetaLabel}"/>
+                                <TextBlock Text="{Binding FreeTier}" Style="{StaticResource MetaValue}"/>
+                            </StackPanel>
+                        </UniformGrid>
+
+                        <!-- Info link -->
+                        <TextBlock Margin="0,0,0,4"
+                                   Visibility="{Binding HasInfoUrl, Converter={StaticResource BoolToVis}}">
+                            <Hyperlink NavigateUri="{Binding InfoUrl}" RequestNavigate="OnInfoLinkNavigate"
+                                       Foreground="{StaticResource AccentBrush}">
+                                <Run Text="Pricing &amp; documentation"/>
+                            </Hyperlink>
+                        </TextBlock>
+
+                        <!-- Default control -->
+                        <DockPanel Margin="0,12,0,0">
+                            <Button DockPanel.Dock="Left" Content="Set as default"
+                                    Style="{StaticResource PrimaryButton}"
+                                    Command="{Binding DataContext.SetDefaultCommand, RelativeSource={RelativeSource AncestorType=Window}}"/>
+                            <TextBlock VerticalAlignment="Center" Margin="12,0,0,0"
+                                       Text="✓ Current default"
+                                       Foreground="{StaticResource PlayingBrush}" FontWeight="SemiBold"
+                                       Visibility="{Binding IsDefault, Converter={StaticResource BoolToVis}}"/>
+                        </DockPanel>
+
+                        <!-- Config fields -->
+                        <StackPanel Margin="0,18,0,0"
+                                    Visibility="{Binding HasConfigFields, Converter={StaticResource BoolToVis}}">
+                            <TextBlock Text="CONFIGURATION" Style="{StaticResource MetaLabel}" Margin="0,0,0,8"/>
+                            <ItemsControl ItemsSource="{Binding Fields}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <StackPanel Margin="0,0,0,12">
+                                            <TextBlock Text="{Binding Label}" Margin="0,0,0,4"/>
+                                            <TextBox Text="{Binding Value, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
+                                            <TextBlock Text="{Binding HelpText}" Style="{StaticResource MetaLabel}"
+                                                       TextWrapping="Wrap" Margin="0,4,0,0"
+                                                       Visibility="{Binding HasHelpText, Converter={StaticResource BoolToVis}}"/>
+                                        </StackPanel>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                            <Button Content="Save credentials" HorizontalAlignment="Left" Margin="0,2,0,0"
+                                    Command="{Binding DataContext.SaveProviderCommand, RelativeSource={RelativeSource AncestorType=Window}}"/>
+                            <TextBlock Text="API keys are encrypted at rest with Windows DPAPI (per user)."
+                                       Style="{StaticResource MetaLabel}" TextWrapping="Wrap" Margin="0,8,0,0"/>
+                        </StackPanel>
+                    </StackPanel>
+                </ScrollViewer>
+            </Border>
+        </Grid>
+
+        <!-- Usage telemetry -->
+        <Border Grid.Row="4" Background="{StaticResource SurfaceBrush}" CornerRadius="8" Padding="16">
+            <StackPanel>
+                <DockPanel>
+                    <TextBlock Text="Usage (stored locally only)" FontWeight="SemiBold" FontSize="14"/>
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                        <Button Content="Refresh" Margin="0,0,8,0" Padding="12,6"
+                                Command="{Binding RefreshUsageCommand}"/>
+                        <Button Content="Clear" Padding="12,6"
+                                Command="{Binding ClearUsageCommand}"/>
+                    </StackPanel>
+                </DockPanel>
+
+                <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                    <TextBlock Text="Total reads: " Style="{StaticResource MetaLabel}"/>
+                    <TextBlock Text="{Binding Usage.TotalReads}" FontWeight="SemiBold" Margin="0,0,18,0"/>
+                    <TextBlock Text="Total characters: " Style="{StaticResource MetaLabel}"/>
+                    <TextBlock Text="{Binding Usage.TotalCharactersDisplay}" FontWeight="SemiBold"/>
+                </StackPanel>
+
+                <!-- Per-provider header -->
+                <Grid Margin="0,10,0,4">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="2*"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Grid.Column="0" Text="PROVIDER" Style="{StaticResource MetaLabel}"/>
+                    <TextBlock Grid.Column="1" Text="READS" Style="{StaticResource MetaLabel}"/>
+                    <TextBlock Grid.Column="2" Text="CHARS" Style="{StaticResource MetaLabel}"/>
+                    <TextBlock Grid.Column="3" Text="FAILS" Style="{StaticResource MetaLabel}"/>
+                    <TextBlock Grid.Column="4" Text="AVG SYNTH" Style="{StaticResource MetaLabel}"/>
+                </Grid>
+                <ItemsControl ItemsSource="{Binding Usage.ByProvider}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <Grid Margin="0,3">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="2*"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="{Binding ProviderId}"/>
+                                <TextBlock Grid.Column="1" Text="{Binding Reads}"/>
+                                <TextBlock Grid.Column="2" Text="{Binding CharactersDisplay}"/>
+                                <TextBlock Grid.Column="3" Text="{Binding Failures}"/>
+                                <TextBlock Grid.Column="4" Text="{Binding AvgSynthesisDisplay}"/>
+                            </Grid>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+                <TextBlock Text="{Binding TelemetryPath}" Style="{StaticResource MetaLabel}"
+                           TextWrapping="Wrap" Margin="0,8,0,0"/>
+            </StackPanel>
+        </Border>
+
+        <!-- Footer -->
+        <DockPanel Grid.Row="6">
+            <TextBlock Text="{Binding StatusMessage}" VerticalAlignment="Center"
+                       Foreground="{StaticResource AccentBrush}"/>
+            <Button DockPanel.Dock="Right" Content="Close" Padding="20,8"
+                    HorizontalAlignment="Right" Click="OnCloseClick"/>
+        </DockPanel>
+    </Grid>
+</Window>

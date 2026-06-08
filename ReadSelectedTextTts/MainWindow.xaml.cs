@@ -6,6 +6,7 @@ using Windows.System;
 using ReadSelectedTextTts.Hotkeys;
 using ReadSelectedTextTts.Selection;
 using ReadSelectedTextTts.Settings;
+using ReadSelectedTextTts.Telemetry;
 using ReadSelectedTextTts.Tray;
 using ReadSelectedTextTts.Tts;
 using ReadSelectedTextTts.ViewModels;
@@ -50,9 +51,12 @@ public partial class MainWindow : Window
 
         var settingsService = new SettingsService();
         var selectionReader = new SelectionReader();
-        var ttsService = new TtsService(settingsService.AppDirectoryPath);
+        var registry = new TtsProviderRegistry();
+        var telemetry = new TelemetryService(settingsService.AppDirectoryPath);
+        var ttsService = new TtsService(registry, telemetry);
 
-        _viewModel = new MainViewModel(selectionReader, ttsService, settingsService);
+        _viewModel = new MainViewModel(selectionReader, ttsService, settingsService, registry, telemetry);
+        _viewModel.SettingsRequested += OnSettingsRequested;
         DataContext = _viewModel;
 
         _trayIconManager = new TrayIconManager();
@@ -245,6 +249,25 @@ public partial class MainWindow : Window
     {
         Log.Inf("Tray menu requested Exit.");
         ExitApplication();
+    }
+
+    private void OnSettingsRequested(object? sender, EventArgs e)
+    {
+        OpenSettingsWindow();
+    }
+
+    private async void OpenSettingsWindow()
+    {
+        Log.Inf("Opening Settings window.");
+        var settingsViewModel = _viewModel.CreateSettingsViewModel();
+        var window = new SettingsWindow(settingsViewModel);
+        if (IsVisible)
+        {
+            window.Owner = this;
+        }
+
+        window.ShowDialog();
+        await _viewModel.RefreshAfterSettingsAsync();
     }
 
     private void ExitButton_OnClick(object sender, RoutedEventArgs e)

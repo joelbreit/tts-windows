@@ -6,9 +6,9 @@
         mc:Ignorable="d"
         Title="Read Selected Text TTS"
         Icon="app.ico"
-        Height="500"
+        Height="588"
         Width="520"
-        MinHeight="460"
+        MinHeight="548"
         MinWidth="480"
         WindowStartupLocation="CenterScreen"
         Background="{StaticResource BackgroundBrush}"
@@ -17,6 +17,8 @@
         FontSize="13">
     <Grid Margin="20">
         <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="16"/>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="16"/>
             <RowDefinition Height="Auto"/>
@@ -68,8 +70,24 @@
             </TextBlock>
         </WrapPanel>
 
-        <!-- Voice -->
+        <!-- TTS Provider -->
         <StackPanel Grid.Row="2">
+            <DockPanel Margin="0,0,0,6">
+                <TextBlock Text="TTS Provider" FontSize="12"
+                           Foreground="{StaticResource SubTextBrush}"/>
+                <Button DockPanel.Dock="Right" Content="⚙ Settings"
+                        Padding="12,4" FontSize="12" HorizontalAlignment="Right"
+                        Command="{Binding OpenSettingsCommand}"/>
+            </DockPanel>
+            <ComboBox ItemsSource="{Binding Providers}"
+                      SelectedItem="{Binding SelectedProvider, Mode=TwoWay}"
+                      DisplayMemberPath="DisplayName"/>
+            <TextBlock Text="{Binding ProviderSummary}" FontSize="11"
+                       Foreground="{StaticResource SubTextBrush}" Margin="2,5,0,0"/>
+        </StackPanel>
+
+        <!-- Voice -->
+        <StackPanel Grid.Row="4">
             <TextBlock Text="Voice" FontSize="12"
                        Foreground="{StaticResource SubTextBrush}" Margin="0,0,0,6"/>
             <ComboBox ItemsSource="{Binding Voices}"
@@ -78,7 +96,7 @@
         </StackPanel>
 
         <!-- Playback Speed -->
-        <StackPanel Grid.Row="4">
+        <StackPanel Grid.Row="6">
             <DockPanel Margin="0,0,0,8">
                 <TextBlock Text="Playback Speed" FontSize="12"
                            Foreground="{StaticResource SubTextBrush}"/>
@@ -107,7 +125,7 @@
         </StackPanel>
 
         <!-- Test Text -->
-        <DockPanel Grid.Row="6">
+        <DockPanel Grid.Row="8">
             <TextBlock DockPanel.Dock="Top" Text="Test Text" FontSize="12"
                        Foreground="{StaticResource SubTextBrush}" Margin="0,0,0,6"/>
             <TextBox Text="{Binding ManualText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
@@ -117,7 +135,7 @@
         </DockPanel>
 
         <!-- Read Actions -->
-        <UniformGrid Grid.Row="8" Columns="3">
+        <UniformGrid Grid.Row="10" Columns="3">
             <Button Content="Read Selection"
                     Style="{StaticResource PrimaryButton}"
                     Margin="0,0,5,0"
@@ -133,7 +151,7 @@
         </UniformGrid>
 
         <!-- Playback Controls + Exit -->
-        <DockPanel Grid.Row="10">
+        <DockPanel Grid.Row="12">
             <Button DockPanel.Dock="Right"
                     Content="Exit"
                     Style="{StaticResource DangerButton}"

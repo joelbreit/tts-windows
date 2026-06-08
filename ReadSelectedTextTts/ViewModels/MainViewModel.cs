@@ -1,10 +1,11 @@
 using System.Collections.ObjectModel;
-using System.Windows;
 using System.Windows.Input;
 using ReadSelectedTextTts.Models;
 using ReadSelectedTextTts.Selection;
 using ReadSelectedTextTts.Settings;
+using ReadSelectedTextTts.Telemetry;
 using ReadSelectedTextTts.Tts;
+using ReadSelectedTextTts.Tts.Providers;
 using Windows.System;
 using Log = Logger.Logger;
 
@@ -15,9 +16,13 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     private readonly SelectionReader _selectionReader;
     private readonly TtsService _ttsService;
     private readonly SettingsService _settingsService;
+    private readonly TtsProviderRegistry _registry;
+    private readonly TelemetryService _telemetry;
     private readonly SemaphoreSlim _saveLock = new(1, 1);
     private AppSettings _settings = new();
+    private TtsProviderDescriptor? _selectedProvider;
     private VoiceOption? _selectedVoice;
+    private bool _suppressProviderReload;
     private double _speed = 1.0;
     private string _manualText = "This is a test sentence from Read Selected Text TTS.";
     private uint _activeHotkeyModifiers;
@@ -31,11 +36,15 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     public MainViewModel(
         SelectionReader selectionReader,
         TtsService ttsService,
-        SettingsService settingsService)
+        SettingsService settingsService,
+        TtsProviderRegistry registry,
+        TelemetryService telemetry)
     {
         _selectionReader = selectionReader;
         _ttsService = ttsService;
         _settingsService = settingsService;
+        _registry = registry;
+        _telemetry = telemetry;
         _activeHotkeyModifiers = _settings.HotkeyModifiers;
         _activeHotkeyKey = _settings.HotkeyKey;
 
@@ -49,9 +58,14 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         ReadTestTextCommand = new AsyncRelayCommand(ReadManualTextAsync, () => SelectedVoice is not null && !string.IsNullOrWhiteSpace(ManualText));
         IncreaseSpeedCommand = new RelayCommand(IncreaseSpeed, () => Speed < 4.0);
         DecreaseSpeedCommand = new RelayCommand(DecreaseSpeed, () => Speed > 0.1);
+        OpenSettingsCommand = new RelayCommand(() => SettingsRequested?.Invoke(this, EventArgs.Empty));
     }
 
     public event EventHandler<string>? NotificationRequested;
+
+    public event EventHandler? SettingsRequested;
+
+    public ObservableCollection<TtsProviderDescriptor> Providers { get; } = [];
 
     public ObservableCollection<VoiceOption> Voices { get; } = [];
 
@@ -71,6 +85,34 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
     public ICommand DecreaseSpeedCommand { get; }
 
+    public ICommand OpenSettingsCommand { get; }
+
+    public TtsProviderDescriptor? SelectedProvider
+    {
+        get => _selectedProvider;
+        set
+        {
+            if (!SetProperty(ref _selectedProvider, value))
+            {
+                return;
+            }
+
+            OnPropertyChanged(nameof(ProviderSummary));
+
+            if (value is not null && !_suppressProviderReload)
+            {
+                _settings.SelectedProviderId = value.Id;
+                SaveSettingsFireAndForget();
+                _ = ReloadVoicesAsync();
+            }
+        }
+    }
+
+    /// <summary>One-line cost/quality summary for the active provider, shown under the dropdown.</summary>
+    public string ProviderSummary => _selectedProvider is null
+        ? string.Empty
+        : $"Quality {_selectedProvider.Quality}  ·  {_selectedProvider.Latency}  ·  {_selectedProvider.Cost}";
+
     public VoiceOption? SelectedVoice
     {
         get => _selectedVoice;
@@ -81,8 +123,12 @@ public sealed class MainViewModel : ObservableObject, IDisposable
                 return;
             }
 
-            _settings.VoiceId = value?.Id;
-            SaveSettingsFireAndForget();
+            if (value is not null)
+            {
+                _settings.GetProvider(value.ProviderId).SelectedVoiceId = value.Id;
+                SaveSettingsFireAndForget();
+            }
+
             RaiseCommandCanExecuteChanged();
         }
     }
@@ -164,43 +210,106 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         _activeHotkeyModifiers = _settings.HotkeyModifiers;
         _activeHotkeyKey = _settings.HotkeyKey;
         Log.Dbg(
-            $"Loaded settings. Speed={_settings.Speed:F1}, VoiceId='{_settings.VoiceId ?? "<null>"}', Hotkey={FormatHotkey(_activeHotkeyModifiers, _activeHotkeyKey)}");
+            $"Loaded settings. Provider='{_settings.SelectedProviderId}', Speed={_settings.Speed:F1}, Hotkey={FormatHotkey(_activeHotkeyModifiers, _activeHotkeyKey)}");
 
         Speed = _settings.Speed;
 
+        Providers.Clear();
+        foreach (var provider in _registry.Providers)
+        {
+            Providers.Add(provider.Descriptor);
+        }
+
+        _suppressProviderReload = true;
+        SelectedProvider = Providers.FirstOrDefault(p => p.Id == _settings.SelectedProviderId)
+                           ?? Providers.FirstOrDefault();
+        _suppressProviderReload = false;
+
+        await ReloadVoicesAsync();
+
+        OnPropertyChanged(nameof(HotkeyDisplay));
+        OnPropertyChanged(nameof(SelectionHotkeyDisplay));
+        OnPropertyChanged(nameof(ClipboardHotkeyDisplay));
+        await SaveSettingsAsync();
+    }
+
+    /// <summary>Reloads the voice list from the active provider and restores its saved voice.</summary>
+    public async Task ReloadVoicesAsync()
+    {
         Voices.Clear();
-        foreach (var voice in _ttsService.GetInstalledVoices())
+        SelectedVoice = null;
+
+        var descriptor = _selectedProvider;
+        if (descriptor is null)
+        {
+            return;
+        }
+
+        var provider = _registry.GetOrDefault(descriptor.Id);
+        var config = _registry.ConfigFor(descriptor.Id, _settings);
+
+        if (descriptor.RequiresApiKey && !provider.IsConfigured(config))
+        {
+            Log.Wrn($"Provider '{descriptor.Id}' is not configured.");
+            NotificationRequested?.Invoke(this, $"{descriptor.DisplayName} needs setup. Open Settings to add an API key.");
+            RaiseCommandCanExecuteChanged();
+            return;
+        }
+
+        IReadOnlyList<VoiceOption> voices;
+        try
+        {
+            voices = await provider.GetVoicesAsync(config);
+        }
+        catch (Exception ex)
+        {
+            Log.Err($"Failed to load voices for '{descriptor.Id}': {ex}");
+            NotificationRequested?.Invoke(this, $"Failed to load {descriptor.DisplayName} voices: {ex.Message}");
+            RaiseCommandCanExecuteChanged();
+            return;
+        }
+
+        foreach (var voice in voices)
         {
             Voices.Add(voice);
         }
 
         if (Voices.Count == 0)
         {
-            Log.Wrn("No Windows voices were found.");
-            NotificationRequested?.Invoke(this, "No Windows voices installed.");
-            await SaveSettingsAsync();
+            Log.Wrn($"Provider '{descriptor.Id}' returned no voices.");
+            NotificationRequested?.Invoke(this, $"{descriptor.DisplayName} has no available voices.");
             return;
         }
 
-        SelectedVoice = ResolveSelectedVoice();
-        Log.Inf($"Selected default voice: {SelectedVoice?.DisplayName ?? "<none>"}");
-        await SaveSettingsAsync();
-        OnPropertyChanged(nameof(HotkeyDisplay));
-        OnPropertyChanged(nameof(SelectionHotkeyDisplay));
-        OnPropertyChanged(nameof(ClipboardHotkeyDisplay));
+        SelectedVoice = ResolveSelectedVoice(descriptor.Id);
+        Log.Inf($"Active provider '{descriptor.Id}', voice '{SelectedVoice?.DisplayName ?? "<none>"}'.");
+    }
+
+    /// <summary>Creates a settings view model sharing this VM's live settings and save path.</summary>
+    public SettingsViewModel CreateSettingsViewModel() =>
+        new(_settings, _registry, _telemetry, SaveSettingsAsync);
+
+    /// <summary>Re-syncs provider/voice state after the Settings window closes.</summary>
+    public async Task RefreshAfterSettingsAsync()
+    {
+        _suppressProviderReload = true;
+        SelectedProvider = Providers.FirstOrDefault(p => p.Id == _settings.SelectedProviderId)
+                           ?? Providers.FirstOrDefault();
+        _suppressProviderReload = false;
+
+        await ReloadVoicesAsync();
     }
 
     public async Task ReadSelectionAsync()
     {
-        if (SelectedVoice is null)
+        if (!EnsureVoice())
         {
-            NotificationRequested?.Invoke(this, "No Windows voices installed.");
             return;
         }
 
         try
         {
-            Log.Dbg($"ReadSelection requested. Active voice='{SelectedVoice.DisplayName}', speed={Speed:F1}x");
+            Log.Dbg($"ReadSelection requested. Active voice='{SelectedVoice!.DisplayName}', speed={Speed:F1}x");
             var selectedText = await _selectionReader.ReadSelectionAsync();
             if (string.IsNullOrWhiteSpace(selectedText))
             {
@@ -210,9 +319,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             }
 
             Log.Inf($"ReadSelection speaking text. Length={selectedText.Length}");
-            await _ttsService.SpeakAsync(selectedText, SelectedVoice.Voice, Speed);
-            IsPlaying = _ttsService.IsPlaying;
-            IsPaused = _ttsService.IsPaused;
+            await SpeakAsync(selectedText, "selection");
         }
         catch (Exception ex)
         {
@@ -223,15 +330,14 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
     public async Task ReadClipboardAsync()
     {
-        if (SelectedVoice is null)
+        if (!EnsureVoice())
         {
-            NotificationRequested?.Invoke(this, "No Windows voices installed.");
             return;
         }
 
         try
         {
-            Log.Dbg($"ReadClipboard requested. Active voice='{SelectedVoice.DisplayName}', speed={Speed:F1}x");
+            Log.Dbg($"ReadClipboard requested. Active voice='{SelectedVoice!.DisplayName}', speed={Speed:F1}x");
             var clipboardText = _selectionReader.ReadClipboardText();
             if (string.IsNullOrWhiteSpace(clipboardText))
             {
@@ -241,9 +347,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             }
 
             Log.Inf($"ReadClipboard speaking text. Length={clipboardText.Length}");
-            await _ttsService.SpeakAsync(clipboardText, SelectedVoice.Voice, Speed);
-            IsPlaying = _ttsService.IsPlaying;
-            IsPaused = _ttsService.IsPaused;
+            await SpeakAsync(clipboardText, "clipboard");
         }
         catch (Exception ex)
         {
@@ -294,6 +398,26 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         OnPropertyChanged(nameof(ClipboardHotkeyDisplay));
     }
 
+    private async Task SpeakAsync(string text, string source)
+    {
+        var voice = SelectedVoice!;
+        var config = _registry.ConfigFor(voice.ProviderId, _settings);
+        await _ttsService.SpeakAsync(text, voice, config, Speed, source);
+        IsPlaying = _ttsService.IsPlaying;
+        IsPaused = _ttsService.IsPaused;
+    }
+
+    private bool EnsureVoice()
+    {
+        if (SelectedVoice is not null)
+        {
+            return true;
+        }
+
+        NotificationRequested?.Invoke(this, "No voice available. Open Settings to configure a provider.");
+        return false;
+    }
+
     private void Pause()
     {
         _ttsService.Pause();
@@ -317,9 +441,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
     private async Task ReadManualTextAsync()
     {
-        if (SelectedVoice is null)
+        if (!EnsureVoice())
         {
-            NotificationRequested?.Invoke(this, "No Windows voices installed.");
             return;
         }
 
@@ -332,9 +455,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         try
         {
             Log.Dbg($"ReadTestText requested. Length={ManualText.Length}, speed={Speed:F1}x");
-            await _ttsService.SpeakAsync(ManualText, SelectedVoice.Voice, Speed);
-            IsPlaying = _ttsService.IsPlaying;
-            IsPaused = _ttsService.IsPaused;
+            await SpeakAsync(ManualText, "test");
         }
         catch (Exception ex)
         {
@@ -372,22 +493,34 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         {
             _settings.HotkeyKey = 0x52;
         }
-    }
 
-    private VoiceOption? ResolveSelectedVoice()
-    {
+        if (string.IsNullOrWhiteSpace(_settings.SelectedProviderId))
+        {
+            _settings.SelectedProviderId = WindowsTtsProvider.ProviderId;
+        }
+
+        // Migrate the legacy top-level VoiceId into the Windows provider bucket.
         if (!string.IsNullOrWhiteSpace(_settings.VoiceId))
         {
-            var matchingVoice = Voices.FirstOrDefault(voice => voice.Id == _settings.VoiceId);
-            if (matchingVoice is not null)
+            var windows = _settings.GetProvider(WindowsTtsProvider.ProviderId);
+            windows.SelectedVoiceId ??= _settings.VoiceId;
+            _settings.VoiceId = null;
+            Log.Inf("Migrated legacy VoiceId into the Windows provider settings.");
+        }
+    }
+
+    private VoiceOption? ResolveSelectedVoice(string providerId)
+    {
+        var savedVoiceId = _settings.GetProvider(providerId).SelectedVoiceId;
+        if (!string.IsNullOrWhiteSpace(savedVoiceId))
+        {
+            var match = Voices.FirstOrDefault(voice => voice.Id == savedVoiceId);
+            if (match is not null)
             {
-                return matchingVoice;
+                return match;
             }
         }
 
-        // No "(Natural)" voice preference: those voices are unreachable via the speech
-        // API (see docs/windows-natural-voices-unavailable.md). Fall back to the first
-        // available voice.
         return Voices.FirstOrDefault();
     }
 

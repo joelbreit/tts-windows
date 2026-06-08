@@ -46,10 +46,30 @@ dotnet run --project .\ReadSelectedTextTts\ReadSelectedTextTts.csproj
   - `Show/Hide`
   - `Exit`
 - Window controls:
-  - Voice dropdown (lists the installed Windows voices; see note below)
+  - TTS provider dropdown + `⚙ Settings` button (see "TTS providers" below)
+  - Voice dropdown (lists the active provider's voices)
   - Speed slider and `-0.1` / `+0.1` buttons (`0.1x` to `4.0x`)
   - `Read Selection`, `Read Clipboard`, `Read Test Text`, `Pause`, `Resume`, `Stop`, `Exit`
   - Built-in `Test Text` box for local playback verification without selecting text in another app
+
+## TTS providers
+
+The app supports multiple TTS providers behind a common abstraction
+(`ITtsProvider` + `TtsProviderRegistry`). Today only the local **Windows** provider
+ships; cloud providers (Azure, OpenAI, etc.) can be added by implementing
+`ITtsProvider` and registering it — the provider dropdown, Settings UI, config
+storage, and telemetry pick it up automatically. See
+[`docs/tts-options.html`](./docs/tts-options.html) for the provider shortlist.
+
+Open `⚙ Settings` to:
+- Browse providers with quality/latency/cost/free-tier info and pricing links
+- Enter per-provider credentials (e.g. API keys) via dynamically-generated fields
+- Set the **machine default** provider
+- Review local **usage telemetry** (reads, characters, failures, avg synthesis time)
+
+API keys are encrypted at rest with **Windows DPAPI** (scoped to your user
+account) — they are never written in plaintext. Usage telemetry is stored locally
+only and never leaves the machine.
 
 ## A note on voices
 
@@ -65,9 +85,13 @@ and [`docs/tts-options.html`](./docs/tts-options.html).
 ## Persistence
 
 - Settings file: `%AppData%\ReadSelectedTextTts\settings.json`
-  - Selected voice ID
+  - Selected provider + per-provider voice
+  - Per-provider config (secrets DPAPI-encrypted; options in plaintext)
   - Playback speed
   - Hotkey modifiers/key
+- Usage telemetry: `%AppData%\ReadSelectedTextTts\telemetry.jsonl`
+  - One JSON line per read (provider, voice, char count, synthesis time, success)
+  - Local only; clearable from the Settings window
 - App log: `%AppData%\ReadSelectedTextTts\app.log`
   - Includes playback events and temporary detailed selection diagnostics (UIA + clipboard fallback)
 
