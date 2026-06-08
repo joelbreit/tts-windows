@@ -4,7 +4,6 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using ReadSelectedTextTts.Models;
-using Windows.Storage.Streams;
 using Log = Logger.Logger;
 
 namespace ReadSelectedTextTts.Tts.Providers;
@@ -121,7 +120,7 @@ public sealed class AzureTtsProvider : ITtsProvider
 
         var bytes = await response.Content.ReadAsByteArrayAsync(cancellationToken);
         Log.Trc($"Azure synthesized {bytes.Length} bytes of MP3 for voice '{voice.Id}'.");
-        return new TtsSynthesisResult { Stream = ToStream(bytes), ContentType = "audio/mpeg" };
+        return new TtsSynthesisResult { Stream = AudioStreams.FromBytes(bytes), ContentType = "audio/mpeg" };
     }
 
     private static (string Key, string Region) RequireCredentials(IProviderConfig config)
@@ -157,21 +156,6 @@ public sealed class AzureTtsProvider : ITtsProvider
             _ => string.Empty,
         };
         throw new InvalidOperationException($"Azure Speech failed to {action}: {(int)response.StatusCode} {detail}{hint}");
-    }
-
-    private static IRandomAccessStream ToStream(byte[] bytes)
-    {
-        var stream = new InMemoryRandomAccessStream();
-        using (var writer = new DataWriter(stream))
-        {
-            writer.WriteBytes(bytes);
-            writer.StoreAsync().AsTask().GetAwaiter().GetResult();
-            writer.FlushAsync().AsTask().GetAwaiter().GetResult();
-            writer.DetachStream();
-        }
-
-        stream.Seek(0);
-        return stream;
     }
 
     private sealed class AzureVoice

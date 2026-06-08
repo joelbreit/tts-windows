@@ -17,8 +17,7 @@ public sealed class TtsProviderRegistry
     {
         Register(new WindowsTtsProvider());
         Register(new AzureTtsProvider());
-        // Future providers go here, e.g.:
-        // Register(new OpenAiTtsProvider());
+        Register(new OpenAiTtsProvider());
     }
 
     private void Register(ITtsProvider provider)

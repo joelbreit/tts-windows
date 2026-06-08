@@ -59,12 +59,14 @@ The app supports multiple TTS providers behind a common abstraction
 
 - **Windows (Local)** — offline SAPI voices; zero setup/cost.
 - **Azure AI Speech (Neural)** — cloud neural voices (~300 voices); needs a Speech
-  resource key + region. The F0 free tier covers 500k chars/month. Enter the key
-  under `⚙ Settings`.
+  resource key + region. The F0 free tier covers 500k chars/month.
+- **OpenAI TTS** — cloud voices via the OpenAI audio API; needs an OpenAI API key.
+  Pay-as-you-go (no free tier). Optional `Model` field (`tts-1`, `tts-1-hd`,
+  `gpt-4o-mini-tts`).
 
-More cloud providers (OpenAI, etc.) can be added by implementing `ITtsProvider`
-and registering it — the provider dropdown, Settings UI, config storage, and
-telemetry pick it up automatically. See
+Enter cloud credentials under `⚙ Settings`. More providers can be added by
+implementing `ITtsProvider` and registering it — the provider dropdown, Settings
+UI, config storage, and telemetry pick it up automatically. See
 [`docs/tts-options.html`](./docs/tts-options.html) for the provider shortlist.
 
 Open `⚙ Settings` to:
