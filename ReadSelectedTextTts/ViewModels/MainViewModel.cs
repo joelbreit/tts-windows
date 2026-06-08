@@ -385,10 +385,10 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             }
         }
 
-        var naturalVoice = Voices.FirstOrDefault(
-            voice => voice.DisplayName.Contains("(Natural)", StringComparison.OrdinalIgnoreCase));
-
-        return naturalVoice ?? Voices.FirstOrDefault();
+        // No "(Natural)" voice preference: those voices are unreachable via the speech
+        // API (see docs/windows-natural-voices-unavailable.md). Fall back to the first
+        // available voice.
+        return Voices.FirstOrDefault();
     }
 
     private void OnPlaybackStateChanged(object? sender, EventArgs e)

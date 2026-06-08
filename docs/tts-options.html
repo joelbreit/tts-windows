@@ -1,0 +1,664 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>TTS Options — ReadSelectedTextTts</title>
+  <style>
+    :root {
+      --bg: #0f1117;
+      --surface: #1a1d27;
+      --surface2: #22263a;
+      --border: #2e3352;
+      --accent: #6c8ef5;
+      --accent2: #4ade80;
+      --warn: #facc15;
+      --danger: #f87171;
+      --text: #e2e8f0;
+      --muted: #8892b0;
+      --code-bg: #0d1117;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      font-size: 15px;
+      line-height: 1.7;
+      padding: 2rem 1rem 4rem;
+    }
+    .container { max-width: 1060px; margin: 0 auto; }
+
+    h1 { font-size: 2rem; font-weight: 700; margin-bottom: 0.25rem; color: #fff; }
+    h2 { font-size: 1.3rem; font-weight: 600; color: var(--accent); margin: 2.5rem 0 1rem; border-bottom: 1px solid var(--border); padding-bottom: 0.4rem; }
+    h3 { font-size: 1.05rem; font-weight: 600; color: #fff; margin: 1.5rem 0 0.5rem; }
+    p  { margin-bottom: 0.75rem; color: var(--text); }
+    ul { padding-left: 1.4rem; margin-bottom: 0.75rem; }
+    li { margin-bottom: 0.25rem; }
+    a  { color: var(--accent); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    code {
+      background: var(--code-bg);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 1px 5px;
+      font-family: 'Cascadia Code', 'Consolas', monospace;
+      font-size: 0.85em;
+      color: #a5d6ff;
+    }
+
+    .subtitle { color: var(--muted); margin-bottom: 2rem; }
+
+    /* Callout boxes */
+    .callout {
+      border-left: 3px solid var(--accent);
+      background: var(--surface);
+      border-radius: 0 8px 8px 0;
+      padding: 0.85rem 1.1rem;
+      margin: 1.2rem 0;
+    }
+    .callout.rec  { border-color: var(--accent2); }
+    .callout.warn { border-color: var(--warn); }
+    .callout-label {
+      font-size: 0.7rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--muted);
+      margin-bottom: 0.25rem;
+    }
+    .callout.rec  .callout-label { color: var(--accent2); }
+    .callout.warn .callout-label { color: var(--warn); }
+
+    /* Stars */
+    .stars { color: var(--warn); font-size: 0.95em; letter-spacing: 1px; }
+    .stars .empty { color: var(--border); }
+
+    /* Badge */
+    .badge {
+      display: inline-block;
+      font-size: 0.7rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      padding: 1px 7px;
+      border-radius: 99px;
+      margin-left: 6px;
+      vertical-align: middle;
+    }
+    .badge-green  { background: #14532d; color: #4ade80; }
+    .badge-blue   { background: #1e3a5f; color: #93c5fd; }
+    .badge-yellow { background: #422006; color: #fcd34d; }
+    .badge-red    { background: #450a0a; color: #fca5a5; }
+
+    /* Comparison table */
+    .table-wrap { overflow-x: auto; margin: 1.5rem 0; }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.9rem;
+      background: var(--surface);
+      border-radius: 10px;
+      overflow: hidden;
+    }
+    th {
+      background: var(--surface2);
+      color: var(--muted);
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      padding: 0.65rem 1rem;
+      text-align: left;
+    }
+    td {
+      padding: 0.6rem 1rem;
+      border-top: 1px solid var(--border);
+      vertical-align: top;
+    }
+    tr.highlight td { background: rgba(108, 142, 245, 0.07); }
+    tr.highlight2 td { background: rgba(74, 222, 128, 0.05); }
+    td.name { font-weight: 600; white-space: nowrap; }
+    td.price { font-family: 'Cascadia Code', monospace; font-size: 0.85em; color: #a5d6ff; }
+    .green { color: var(--accent2); }
+    .yellow { color: var(--warn); }
+    .red { color: var(--danger); }
+    .muted { color: var(--muted); }
+
+    /* Option cards */
+    .option-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 1.25rem 1.4rem;
+      margin-bottom: 1rem;
+    }
+    .option-header {
+      display: flex;
+      align-items: baseline;
+      gap: 0.75rem;
+      margin-bottom: 0.6rem;
+      flex-wrap: wrap;
+    }
+    .option-title { font-size: 1.1rem; font-weight: 700; color: #fff; }
+    .option-meta {
+      display: flex;
+      gap: 1.5rem;
+      flex-wrap: wrap;
+      margin-bottom: 0.75rem;
+      font-size: 0.88rem;
+    }
+    .meta-item { display: flex; flex-direction: column; }
+    .meta-label { color: var(--muted); font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 0.1rem; }
+    .option-pros { color: var(--accent2); }
+    .option-cons { color: var(--danger); }
+    .option-pros li::marker, .option-cons li::marker { font-size: 0.8em; }
+    .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 0 1.5rem; }
+    @media (max-width: 600px) { .two-col { grid-template-columns: 1fr; } }
+
+    /* Section divider */
+    .section-divider {
+      border: none;
+      border-top: 1px solid var(--border);
+      margin: 2.5rem 0;
+    }
+
+    /* Integration snippet */
+    .snippet-label { color: var(--muted); font-size: 0.78rem; margin-bottom: 0.3rem; text-transform: uppercase; letter-spacing: 0.06em; }
+    pre {
+      background: var(--code-bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 1rem 1.2rem;
+      overflow-x: auto;
+      font-family: 'Cascadia Code', 'Consolas', monospace;
+      font-size: 0.82em;
+      line-height: 1.5;
+      color: #c9d1d9;
+      margin-bottom: 1rem;
+    }
+    pre .kw  { color: #ff7b72; }
+    pre .ty  { color: #ffa657; }
+    pre .str { color: #a5d6ff; }
+    pre .cm  { color: #8b949e; font-style: italic; }
+    pre .nm  { color: #d2a8ff; }
+
+    .toc { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 1rem 1.4rem; margin-bottom: 2.5rem; display: inline-block; min-width: 260px; }
+    .toc-title { font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.07em; color: var(--muted); margin-bottom: 0.5rem; }
+    .toc ol { padding-left: 1.2rem; }
+    .toc li { margin-bottom: 0.2rem; font-size: 0.9rem; }
+  </style>
+</head>
+<body>
+<div class="container">
+
+  <h1>TTS API &amp; Voice Options</h1>
+  <p class="subtitle">Evaluation for <strong>ReadSelectedTextTts</strong> — hotkey-triggered selected-text reader, personal use, Windows, .NET 10 WPF</p>
+
+  <div class="toc">
+    <div class="toc-title">Contents</div>
+    <ol>
+      <li><a href="#context">Use-Case Context</a></li>
+      <li><a href="#criteria">Evaluation Criteria</a></li>
+      <li><a href="#comparison">Quick Comparison Table</a></li>
+      <li><a href="#cloud">Cloud API Options</a></li>
+      <li><a href="#local">Local / Downloadable Options</a></li>
+      <li><a href="#recommendation">Recommendation</a></li>
+      <li><a href="#integration">Integration Notes (.NET)</a></li>
+    </ol>
+  </div>
+
+  <!-- ───────────────────────────────────────────────────── -->
+  <h2 id="context">1. Use-Case Context</h2>
+
+  <p>This app is a <strong>personal reading assistant</strong> triggered on-demand via a global hotkey. Key characteristics that drive the evaluation:</p>
+  <ul>
+    <li><strong>Trigger pattern:</strong> User selects text, presses Win+Alt+R — they expect speech to start quickly (&lt;500ms perceived).</li>
+    <li><strong>Text length:</strong> Anything from a URL slug to multi-paragraph articles. Streaming matters for long texts.</li>
+    <li><strong>Volume estimate:</strong> Personal use at active reading pace (~150 wpm, ~800 chars/min). A moderate session of 30–60 min/day yields roughly <strong>50k–150k chars/month</strong>.</li>
+    <li><strong>Context:</strong> Windows desktop, always-on internet assumed acceptable. Fully offline is a nice-to-have, not a hard requirement (that constraint was in the original spec, but has since been relaxed).</li>
+    <li><strong>Stack:</strong> .NET 10 WPF. Existing <code>TtsService.cs</code> wraps WinRT SpeechSynthesizer — the new provider would replace or extend that class.</li>
+  </ul>
+
+  <div class="callout warn">
+    <div class="callout-label">Why the local "Natural" voices can't be used (verified 2026-06-08)</div>
+    Installing a Windows 11 <em>Natural</em> / <em>Natural HD</em> voice (e.g. <em>Ava</em>, <em>Aria</em>) does <strong>not</strong> make it usable by this app — and this is by design, not a bug. These voices ship as Appx packages (<code>MicrosoftWindows.Voice.en-US.AvaHD.1</code>) carrying their own private neural engine (~580 MB of encoder/decoder/vocoder <code>.bin</code> models + a COM CLSID). They register only via the Narrator-private AppExtension contract <code>com.microsoft.voice.model.1</code> — their declared token hive (<code>HKLM\SOFTWARE\Microsoft\Speech Server\v11.0</code>) doesn't even exist on the machine, and their COM engine isn't in <code>HKEY_CLASSES_ROOT</code>. As a result they are invisible to all three public TTS surfaces: <code>Windows.Media.SpeechSynthesis</code> (OneCore, what this app uses), <code>System.Speech</code> (SAPI5), and any OneCore token store. Microsoft reserves them for Narrator / the accessibility stack. <strong>Conclusion: a cloud or local-model TTS provider is the only realistic path to better voices.</strong> The good news — the same Ava voice is available as <code>en-US-AvaNeural</code> via Azure below.
+  </div>
+
+  <!-- ───────────────────────────────────────────────────── -->
+  <h2 id="criteria">2. Evaluation Criteria</h2>
+
+  <p>Ranked by importance for this use case:</p>
+  <ol>
+    <li><strong>Voice quality / naturalness</strong> — The whole reason to upgrade from David/Zira.</li>
+    <li><strong>First-audio latency (TTFB)</strong> — Time from hotkey press to first audible word. Streaming APIs can start playing before the full text is synthesized.</li>
+    <li><strong>Price</strong> — At ~50–150k chars/month for personal use.</li>
+    <li><strong>.NET / C# integration</strong> — How easily it slots into the existing WPF app.</li>
+    <li><strong>Streaming support</strong> — Critical for long texts; degrades gracefully for short ones.</li>
+    <li><strong>Voice variety &amp; control</strong> — Ability to pick a preferred voice, adjust prosody, etc.</li>
+  </ol>
+
+  <!-- ───────────────────────────────────────────────────── -->
+  <h2 id="comparison">3. Quick Comparison Table</h2>
+
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Provider</th>
+          <th>Quality</th>
+          <th>Latency</th>
+          <th>Price / 1M chars</th>
+          <th>Free Tier</th>
+          <th>.NET SDK</th>
+          <th>Streaming</th>
+          <th>Offline</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr class="highlight">
+          <td class="name">Azure AI Speech <span class="badge badge-blue">★ Recommended</span></td>
+          <td><span class="stars">★★★★</span><span class="stars empty">★</span></td>
+          <td class="green">~100–200ms</td>
+          <td class="price">$16 Neural</td>
+          <td class="green">500k chars/mo</td>
+          <td class="green">First-class</td>
+          <td class="green">Yes</td>
+          <td class="red">No</td>
+        </tr>
+        <tr class="highlight2">
+          <td class="name">OpenAI TTS <span class="badge badge-green">Budget pick</span></td>
+          <td><span class="stars">★★★★</span><span class="stars empty">★</span></td>
+          <td class="yellow">~300–600ms</td>
+          <td class="price">$15 (tts-1) / $30 (HD)</td>
+          <td class="red">None</td>
+          <td class="yellow">HttpClient</td>
+          <td class="green">Yes</td>
+          <td class="red">No</td>
+        </tr>
+        <tr>
+          <td class="name">ElevenLabs <span class="badge badge-yellow">Premium</span></td>
+          <td><span class="stars">★★★★★</span></td>
+          <td class="green">~75ms (Flash)</td>
+          <td class="price">$5–22/mo flat</td>
+          <td class="yellow">10k chars/mo</td>
+          <td class="yellow">HttpClient</td>
+          <td class="green">Yes</td>
+          <td class="red">No</td>
+        </tr>
+        <tr>
+          <td class="name">Google Cloud TTS</td>
+          <td><span class="stars">★★★★</span><span class="stars empty">★</span></td>
+          <td class="yellow">~200–400ms</td>
+          <td class="price">$16 WaveNet/Neural2</td>
+          <td class="yellow">1M chars/mo (Neural2)</td>
+          <td class="yellow">NuGet pkg</td>
+          <td class="green">Yes</td>
+          <td class="red">No</td>
+        </tr>
+        <tr>
+          <td class="name">AWS Polly</td>
+          <td><span class="stars">★★★</span><span class="stars empty">★★</span></td>
+          <td class="yellow">~300–500ms</td>
+          <td class="price">$16 Neural</td>
+          <td class="yellow">5M chars/mo (12 mo)</td>
+          <td class="yellow">AWSSDK NuGet</td>
+          <td class="green">Yes</td>
+          <td class="red">No</td>
+        </tr>
+        <tr>
+          <td class="name">Cartesia Sonic</td>
+          <td><span class="stars">★★★★</span><span class="stars empty">★</span></td>
+          <td class="green">&lt;100ms</td>
+          <td class="price">$5 (Sonic Flash)</td>
+          <td class="yellow">500 chars trial</td>
+          <td class="yellow">REST/WebSocket</td>
+          <td class="green">WebSocket</td>
+          <td class="red">No</td>
+        </tr>
+        <tr>
+          <td class="name">Piper TTS <span class="badge badge-green">Best offline</span></td>
+          <td><span class="stars">★★★</span><span class="stars empty">★★</span></td>
+          <td class="green">~50–150ms</td>
+          <td class="price">Free</td>
+          <td class="green">Fully free</td>
+          <td class="yellow">Subprocess</td>
+          <td class="green">Pipe</td>
+          <td class="green">Yes</td>
+        </tr>
+        <tr>
+          <td class="name">Kokoro (ONNX)</td>
+          <td><span class="stars">★★★★</span><span class="stars empty">★</span></td>
+          <td class="yellow">~200–600ms</td>
+          <td class="price">Free</td>
+          <td class="green">Fully free</td>
+          <td class="yellow">OnnxRuntime</td>
+          <td class="muted">Partial</td>
+          <td class="green">Yes</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p><span class="muted">Latency figures are time-to-first-audio (TTFB) for short texts under typical network conditions. Actual latency depends on text length, network, and whether streaming playback starts before full synthesis.</span></p>
+
+  <!-- ───────────────────────────────────────────────────── -->
+  <h2 id="cloud">4. Cloud API Options</h2>
+
+  <!-- Azure -->
+  <div class="option-card">
+    <div class="option-header">
+      <span class="option-title">Azure AI Speech (Cognitive Services TTS)</span>
+      <span class="badge badge-blue">★ Recommended</span>
+    </div>
+    <div class="option-meta">
+      <div class="meta-item"><span class="meta-label">Quality</span><span class="stars">★★★★</span><span class="stars empty">★</span></div>
+      <div class="meta-item"><span class="meta-label">Latency</span><span class="green">~100–200ms TTFB</span></div>
+      <div class="meta-item"><span class="meta-label">Price (Neural)</span><span>$16 / 1M chars</span></div>
+      <div class="meta-item"><span class="meta-label">Free Tier</span><span class="green">500k chars / month</span></div>
+      <div class="meta-item"><span class="meta-label">.NET SDK</span><span class="green">Microsoft.CognitiveServices.Speech</span></div>
+    </div>
+    <div class="two-col">
+      <div>
+        <h3 class="option-pros">Pros</h3>
+        <ul class="option-pros">
+          <li>500k free chars/month — covers personal use entirely at no cost</li>
+          <li>First-class .NET SDK with native streaming and audio output APIs</li>
+          <li>Supports real-time audio streaming (SpeechSynthesisResult + AudioDataStream)</li>
+          <li>~300 Neural voices across 140 languages</li>
+          <li>SSML support for rate/pitch/emphasis control</li>
+          <li>Microsoft product — good Windows integration story</li>
+          <li>Can pipe audio directly to Windows audio device, no temp files</li>
+        </ul>
+      </div>
+      <div>
+        <h3 class="option-cons">Cons</h3>
+        <ul class="option-cons">
+          <li>Requires Azure account + API key</li>
+          <li>Slight voice "Microsoft" quality ceiling vs. ElevenLabs</li>
+          <li>Network dependency</li>
+          <li>SDK is ~50MB NuGet package</li>
+        </ul>
+      </div>
+    </div>
+    <p>At 50–150k chars/month, you'll likely <strong>stay within the free tier indefinitely</strong>. If you go over, at $16/1M chars you're paying ~$0.80–$2.40/month. Neural voices like <em>en-US-JennyNeural</em>, <em>en-US-GuyNeural</em>, and <em>en-US-AriaNeural</em> are highly natural.</p>
+  </div>
+
+  <!-- OpenAI -->
+  <div class="option-card">
+    <div class="option-header">
+      <span class="option-title">OpenAI TTS</span>
+      <span class="badge badge-green">Budget pick</span>
+    </div>
+    <div class="option-meta">
+      <div class="meta-item"><span class="meta-label">Quality</span><span class="stars">★★★★</span><span class="stars empty">★</span></div>
+      <div class="meta-item"><span class="meta-label">Latency</span><span class="yellow">~300–600ms TTFB</span></div>
+      <div class="meta-item"><span class="meta-label">Price</span><span>$15/1M (tts-1) · $30/1M (tts-1-hd)</span></div>
+      <div class="meta-item"><span class="meta-label">Free Tier</span><span class="red">None</span></div>
+      <div class="meta-item"><span class="meta-label">.NET</span><span>HttpClient / unofficial SDK</span></div>
+    </div>
+    <div class="two-col">
+      <div>
+        <h3 class="option-pros">Pros</h3>
+        <ul class="option-pros">
+          <li>Extremely simple API — one endpoint, dead-easy to add</li>
+          <li>Very natural voices (nova, shimmer, alloy, echo, fable, onyx)</li>
+          <li>Supports streaming (chunked transfer)</li>
+          <li>Pay-as-you-go, no subscription</li>
+          <li>~$1–3/month at personal use volume</li>
+          <li>If you already have an OpenAI API key, zero extra setup</li>
+        </ul>
+      </div>
+      <div>
+        <h3 class="option-cons">Cons</h3>
+        <ul class="option-cons">
+          <li>No free tier (small cost every month)</li>
+          <li>Higher latency than Azure or ElevenLabs Flash</li>
+          <li>Only 6 voices, no SSML</li>
+          <li>No official .NET/C# SDK for TTS endpoint</li>
+        </ul>
+      </div>
+    </div>
+    <p>Best choice if you already use OpenAI and want the simplest integration possible. The <code>tts-1</code> model at $15/1M chars costs roughly <strong>$1–2/month</strong> for typical personal use. Streaming works via chunked HTTP.</p>
+  </div>
+
+  <!-- ElevenLabs -->
+  <div class="option-card">
+    <div class="option-header">
+      <span class="option-title">ElevenLabs</span>
+      <span class="badge badge-yellow">Premium quality</span>
+    </div>
+    <div class="option-meta">
+      <div class="meta-item"><span class="meta-label">Quality</span><span class="stars">★★★★★</span></div>
+      <div class="meta-item"><span class="meta-label">Latency (Flash)</span><span class="green">~75ms TTFB</span></div>
+      <div class="meta-item"><span class="meta-label">Price</span><span>$5/mo (30k) · $22/mo (100k) · $99/mo (500k)</span></div>
+      <div class="meta-item"><span class="meta-label">Free Tier</span><span class="yellow">10k chars/month</span></div>
+      <div class="meta-item"><span class="meta-label">.NET</span><span>HttpClient (no official SDK)</span></div>
+    </div>
+    <div class="two-col">
+      <div>
+        <h3 class="option-pros">Pros</h3>
+        <ul class="option-pros">
+          <li>Best-in-class voice naturalness — genuinely hard to distinguish from human</li>
+          <li>Flash model: ~75ms TTFB, designed for real-time</li>
+          <li>Wide voice library, voice cloning, emotional control</li>
+          <li>Streaming SSE / WebSocket APIs</li>
+        </ul>
+      </div>
+      <div>
+        <h3 class="option-cons">Cons</h3>
+        <ul class="option-cons">
+          <li>Subscription model is expensive for moderate use — $22/mo just to clear 100k chars</li>
+          <li>Free tier (10k chars) runs out in minutes of reading</li>
+          <li>No official .NET SDK, REST/WS only</li>
+          <li>Overkill for "read my clipboard" use case</li>
+        </ul>
+      </div>
+    </div>
+    <p>Worth it if you absolutely want the most natural-sounding voice and don't mind the subscription cost. The $22/mo Creator plan covers ~100k chars — fine for moderate use, but the Azure free tier gives 5× more chars for free. Consider ElevenLabs only if voice quality is the top priority over cost.</p>
+  </div>
+
+  <!-- Google -->
+  <div class="option-card">
+    <div class="option-header">
+      <span class="option-title">Google Cloud Text-to-Speech</span>
+    </div>
+    <div class="option-meta">
+      <div class="meta-item"><span class="meta-label">Quality</span><span class="stars">★★★★</span><span class="stars empty">★</span></div>
+      <div class="meta-item"><span class="meta-label">Latency</span><span class="yellow">~200–400ms</span></div>
+      <div class="meta-item"><span class="meta-label">Price</span><span>$16/1M (WaveNet/Neural2) · $160/1M (Studio)</span></div>
+      <div class="meta-item"><span class="meta-label">Free Tier</span><span class="yellow">1M Neural2 chars/mo (with $300 trial credit)</span></div>
+      <div class="meta-item"><span class="meta-label">.NET</span><span>Google.Cloud.TextToSpeech.V1 NuGet</span></div>
+    </div>
+    <p>Solid option with many voices and good quality. The catch: Google's free tier for Neural2 voices is only available during the 90-day $300 trial period — after that it reverts to pay-as-you-go at $16/1M. WaveNet voices have a genuine free tier of 1M chars/month, but WaveNet quality is slightly below Neural2. The Google Cloud account setup (service account, credentials JSON) is more involved than Azure or OpenAI. Not a bad choice but harder to justify against Azure's unconditional 500k free Neural chars.</p>
+  </div>
+
+  <!-- AWS Polly -->
+  <div class="option-card">
+    <div class="option-header">
+      <span class="option-title">AWS Polly</span>
+    </div>
+    <div class="option-meta">
+      <div class="meta-item"><span class="meta-label">Quality</span><span class="stars">★★★</span><span class="stars empty">★★</span></div>
+      <div class="meta-item"><span class="meta-label">Latency</span><span class="yellow">~300–500ms</span></div>
+      <div class="meta-item"><span class="meta-label">Price</span><span>$16/1M Neural · $4/1M Standard</span></div>
+      <div class="meta-item"><span class="meta-label">Free Tier</span><span class="yellow">5M standard chars/mo for 12 months</span></div>
+      <div class="meta-item"><span class="meta-label">.NET</span><span>AWSSDK.Polly NuGet</span></div>
+    </div>
+    <p>Polly's Neural voices are decent but a step behind Azure, Google, and OpenAI in naturalness. The 12-month free tier is generous if you want to trial it. Long-term, Polly's Standard voices at $4/1M are the cheapest cloud option, though the quality difference vs. Neural voices is noticeable. Good if you already have AWS infrastructure; otherwise Azure is the better default for Windows-first development.</p>
+  </div>
+
+  <!-- Cartesia -->
+  <div class="option-card">
+    <div class="option-header">
+      <span class="option-title">Cartesia Sonic</span>
+      <span class="badge badge-blue">Lowest latency</span>
+    </div>
+    <div class="option-meta">
+      <div class="meta-item"><span class="meta-label">Quality</span><span class="stars">★★★★</span><span class="stars empty">★</span></div>
+      <div class="meta-item"><span class="meta-label">Latency (Flash)</span><span class="green">&lt;100ms TTFB</span></div>
+      <div class="meta-item"><span class="meta-label">Price</span><span>$5/1M (Sonic Flash) · $15/1M (Sonic 2)</span></div>
+      <div class="meta-item"><span class="meta-label">Free Tier</span><span class="red">500 chars trial only</span></div>
+      <div class="meta-item"><span class="meta-label">.NET</span><span>WebSocket / REST</span></div>
+    </div>
+    <p>Purpose-built for real-time, sub-100ms streaming. Outstanding latency — if you feel current TTFB is noticeable, Cartesia is the cure. Sonic Flash at $5/1M is also very competitive on price. The main downsides: no official .NET SDK (WebSocket integration is custom work) and no meaningful free tier to evaluate. Worth considering if latency is your primary pain point.</p>
+  </div>
+
+  <!-- ───────────────────────────────────────────────────── -->
+  <h2 id="local">5. Local / Downloadable Options</h2>
+
+  <!-- Piper -->
+  <div class="option-card">
+    <div class="option-header">
+      <span class="option-title">Piper TTS</span>
+      <span class="badge badge-green">Best offline</span>
+    </div>
+    <div class="option-meta">
+      <div class="meta-item"><span class="meta-label">Quality</span><span class="stars">★★★</span><span class="stars empty">★★</span></div>
+      <div class="meta-item"><span class="meta-label">Latency</span><span class="green">~50–150ms</span></div>
+      <div class="meta-item"><span class="meta-label">Price</span><span class="green">Free (MIT)</span></div>
+      <div class="meta-item"><span class="meta-label">.NET</span><span>Process + stdin/stdout pipe</span></div>
+      <div class="meta-item"><span class="meta-label">Model size</span><span>~30–80 MB per voice</span></div>
+    </div>
+    <div class="two-col">
+      <div>
+        <h3 class="option-pros">Pros</h3>
+        <ul class="option-pros">
+          <li>Completely offline — no API key, no network, no cost</li>
+          <li>Very fast on modern hardware (CPU-only, no GPU needed)</li>
+          <li>Good voice quality for local synthesis — noticeably better than David/Zira</li>
+          <li>Many voices: en-US-ryan, en-US-lessac, en-GB-alan, etc.</li>
+          <li>Streams audio via pipe — start playing before full synthesis</li>
+          <li>Ships as a single .exe + .onnx model file</li>
+        </ul>
+      </div>
+      <div>
+        <h3 class="option-cons">Cons</h3>
+        <ul class="option-cons">
+          <li>Quality gap vs. cloud neural voices is noticeable</li>
+          <li>.NET integration via subprocess (not a native library)</li>
+          <li>Need to bundle the .exe and model in your install</li>
+          <li>Voice selection is limited compared to cloud options</li>
+        </ul>
+      </div>
+    </div>
+    <p>Piper is the right choice if you want zero ongoing cost, no external dependencies, and better-than-SAPI quality. Integration: spawn <code>piper.exe</code> as a child process, pipe text to stdin, read WAV from stdout, feed into <code>MediaPlayer</code>. Model files are ~30–80MB each; the medium-quality <em>en_US-ryan-medium</em> is a good starting voice.</p>
+  </div>
+
+  <!-- Kokoro -->
+  <div class="option-card">
+    <div class="option-header">
+      <span class="option-title">Kokoro TTS (ONNX)</span>
+    </div>
+    <div class="option-meta">
+      <div class="meta-item"><span class="meta-label">Quality</span><span class="stars">★★★★</span><span class="stars empty">★</span></div>
+      <div class="meta-item"><span class="meta-label">Latency</span><span class="yellow">~200–600ms (CPU)</span></div>
+      <div class="meta-item"><span class="meta-label">Price</span><span class="green">Free (Apache 2.0)</span></div>
+      <div class="meta-item"><span class="meta-label">.NET</span><span>Microsoft.ML.OnnxRuntime</span></div>
+      <div class="meta-item"><span class="meta-label">Model size</span><span>~300 MB</span></div>
+    </div>
+    <p>Kokoro is an 82M-parameter model that punches well above its weight — quality is close to cloud neural voices. It's available as ONNX weights and can be run via <code>Microsoft.ML.OnnxRuntime</code> directly in .NET without any subprocess. The downsides: CPU-only inference is noticeably slower than Piper (~200–600ms vs ~50–150ms for short texts), the integration is more complex (you need to handle tokenization and audio decoding), and the 300MB model bundle is larger. Best choice if you want near-cloud quality with zero ongoing cost and are willing to invest in the integration work.</p>
+  </div>
+
+  <div class="callout warn">
+    <div class="callout-label">What about Windows "Natural" Voices? (Don't count on them)</div>
+    It's tempting to assume the free Windows 11 <em>Natural</em> voices show up in <code>SpeechSynthesizer.AllVoices</code> — they do not. As verified on this machine (see the boxed note at the top), the Narrator <em>Natural</em>/<em>Natural HD</em> voices are walled off from every public TTS API by design. Installing more of them will not help this app. The legacy <code>(Natural)</code>-suffixed OneCore neural voices from older Windows builds <em>could</em> appear via this API, but they are increasingly being replaced by the Narrator-only HD packages, so this is not a path to rely on.
+  </div>
+
+  <!-- ───────────────────────────────────────────────────── -->
+  <h2 id="recommendation">6. Recommendation</h2>
+
+  <div class="callout rec">
+    <div class="callout-label">Top Pick — Best Quality × Price × Latency</div>
+    <strong>Azure AI Speech Neural TTS</strong><br>
+    500k free chars/month covers personal use with room to spare. First-class .NET SDK slots cleanly into the existing <code>TtsService</code> architecture. ~100–200ms TTFB with real-time streaming. Voices like <em>en-US-JennyNeural</em> and <em>en-US-GuyNeural</em> are a significant quality jump over David/Zira. If you exceed the free tier, cost is ~$0.80–$2.40/month.
+  </div>
+
+  <div class="callout rec">
+    <div class="callout-label">Runner-Up — Simplest Integration, Lowest Code Cost</div>
+    <strong>OpenAI TTS (tts-1)</strong><br>
+    If you already have an OpenAI API key, this is a 30-minute integration — one HTTP POST, pipe the chunked audio stream into <code>MediaPlayer</code>. No account setup overhead. At ~$1–2/month for personal use, the absence of a free tier is negligible. Voice quality is on par with Azure Neural.
+  </div>
+
+  <div class="callout rec">
+    <div class="callout-label">Best Offline / Zero-Cost Option</div>
+    <strong>Piper TTS</strong><br>
+    If you want no API key, no network dependency, and no ongoing cost, Piper is the right answer. Quality is meaningfully better than SAPI voices. Integration takes an afternoon (subprocess + pipe + WAV decode). Model file is ~30–80MB — acceptable to bundle.
+  </div>
+
+  <h3>Decision Flowchart</h3>
+  <ul>
+    <li>Want free &amp; offline? → <strong>Piper TTS</strong></li>
+    <li>Want near-cloud quality offline? → <strong>Kokoro (ONNX)</strong> (more integration work)</li>
+    <li>Already have an OpenAI key? → <strong>OpenAI TTS</strong> (simplest)</li>
+    <li>Want best quality/price ratio + .NET SDK? → <strong>Azure AI Speech</strong> (recommended)</li>
+    <li>Want absolute best voice quality, cost secondary? → <strong>ElevenLabs</strong> (Flash model)</li>
+    <li>Latency is the main pain point? → <strong>Cartesia Sonic Flash</strong></li>
+  </ul>
+
+  <!-- ───────────────────────────────────────────────────── -->
+  <h2 id="integration">7. Integration Notes (.NET / C#)</h2>
+
+  <p>The existing <code>TtsService.cs</code> has a clean <code>SpeakAsync(string text, VoiceInformation voice, double rate)</code> interface. The suggested pattern is to introduce a <code>ITtsProvider</code> interface so the app can swap providers without rewiring the ViewModel.</p>
+
+  <h3>Azure AI Speech — Streaming Integration Sketch</h3>
+  <div class="snippet-label">NuGet: Microsoft.CognitiveServices.Speech</div>
+  <pre><span class="cm">// In TtsService or a new AzureTtsProvider class</span>
+<span class="kw">using</span> Microsoft.CognitiveServices.Speech;
+<span class="kw">using</span> Microsoft.CognitiveServices.Speech.Audio;
+
+<span class="kw">var</span> config = SpeechConfig.FromSubscription(<span class="str">"&lt;key&gt;"</span>, <span class="str">"eastus"</span>);
+config.SpeechSynthesisVoiceName = <span class="str">"en-US-JennyNeural"</span>;
+
+<span class="cm">// Streams directly to default audio device — no MediaPlayer wiring needed</span>
+<span class="kw">using var</span> synth = <span class="kw">new</span> <span class="ty">SpeechSynthesizer</span>(config);
+<span class="kw">var</span> result = <span class="kw">await</span> synth.SpeakTextAsync(text);
+
+<span class="cm">// For streaming (first audio before full synthesis):</span>
+synth.SynthesisStarted += (_, e) => <span class="cm">/* start playback */</span>;
+<span class="kw">var</span> stream = AudioDataStream.FromResult(result);</pre>
+
+  <h3>OpenAI TTS — Streaming via HttpClient</h3>
+  <div class="snippet-label">No NuGet needed — standard HttpClient</div>
+  <pre><span class="kw">using var</span> http = <span class="kw">new</span> <span class="ty">HttpClient</span>();
+http.DefaultRequestHeaders.Authorization =
+    <span class="kw">new</span> AuthenticationHeaderValue(<span class="str">"Bearer"</span>, <span class="str">"&lt;key&gt;"</span>);
+
+<span class="kw">var</span> body = JsonSerializer.Serialize(<span class="kw">new</span> {
+    model = <span class="str">"tts-1"</span>,
+    input = text,
+    voice = <span class="str">"nova"</span>,
+    response_format = <span class="str">"mp3"</span>
+});
+<span class="kw">var</span> response = <span class="kw">await</span> http.PostAsync(
+    <span class="str">"https://api.openai.com/v1/audio/speech"</span>,
+    <span class="kw">new</span> StringContent(body, Encoding.UTF8, <span class="str">"application/json"</span>));
+
+<span class="cm">// Stream the mp3 bytes directly into MediaPlayer via a custom IRandomAccessStream wrapper</span>
+<span class="kw">var</span> audioStream = <span class="kw">await</span> response.Content.ReadAsStreamAsync();</pre>
+
+  <h3>Piper TTS — Subprocess Integration Sketch</h3>
+  <div class="snippet-label">Bundle piper.exe + model .onnx alongside your app</div>
+  <pre><span class="kw">var</span> psi = <span class="kw">new</span> <span class="ty">ProcessStartInfo</span>(<span class="str">"piper.exe"</span>) {
+    Arguments = <span class="str">$"--model en_US-ryan-medium.onnx --output-raw"</span>,
+    RedirectStandardInput  = <span class="kw">true</span>,
+    RedirectStandardOutput = <span class="kw">true</span>,
+    UseShellExecute = <span class="kw">false</span>,
+    CreateNoWindow  = <span class="kw">true</span>
+};
+<span class="kw">var</span> proc = Process.Start(psi)!;
+<span class="kw">await</span> proc.StandardInput.WriteAsync(text);
+proc.StandardInput.Close();
+
+<span class="cm">// Raw PCM 16-bit 22050 Hz mono out — wrap in WAV header or feed directly to NAudio/WaveOut</span>
+<span class="kw">var</span> rawAudio = proc.StandardOutput.BaseStream;</pre>
+
+  <h3>Key Architectural Note</h3>
+  <p>Cloud APIs return <strong>MP3 or OGG audio bytes</strong>, not a WinRT <code>SpeechSynthesisStream</code>. The existing <code>MediaPlayer</code> setup can still handle this — feed the bytes into a <code>Windows.Storage.Streams.InMemoryRandomAccessStream</code> and pass it to <code>MediaSource.CreateFromStream()</code>, the same pattern already in your code. For streaming playback, you'll need to buffer chunks as they arrive and push into a custom <code>IRandomAccessStream</code>.</p>
+  <p>The <strong>speed/rate control</strong> currently uses <code>PlaybackSession.PlaybackRate</code> on the WinRT <code>MediaPlayer</code> — this will continue to work regardless of TTS provider since it operates on the audio playback layer, not the synthesis layer.</p>
+
+  <hr class="section-divider" />
+  <p class="muted" style="font-size:0.82rem;">Generated 2026-06-08 · Prices are approximate and subject to change; verify on provider pricing pages before committing.</p>
+
+</div>
+</body>
+</html>

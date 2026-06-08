@@ -1,4 +1,16 @@
-## Codex Instructions: “Read Selected Text Anywhere” (WPF, Windows Neural Voices)
+## Codex Instructions: “Read Selected Text Anywhere” (WPF)
+
+> **⚠️ CORRECTION (2026-06-08): The "Natural" / "Neural" voice premise below is wrong.**
+> This spec was written assuming the app could enumerate and use the installed
+> Windows 11 "(Natural)" voices. It cannot — those voices are walled off from every
+> public Windows TTS API and reserved for Narrator. `SpeechSynthesizer.AllVoices`
+> only ever returns the legacy SAPI voices (David, Mark, Zira). The Natural-voice
+> preference logic has been removed from the code. References to "(Natural)" /
+> "Neural" voices in the sections below are retained only as historical record —
+> **do not act on them.** See
+> [`docs/windows-natural-voices-unavailable.md`](./docs/windows-natural-voices-unavailable.md)
+> for the full investigation and [`docs/tts-options.html`](./docs/tts-options.html)
+> for better-voice alternatives.
 
 ### Goal
 
@@ -6,7 +18,7 @@ Build a Windows desktop app for **personal use** that:
 
 * Runs in the **system tray**
 * Reads **currently selected text** from whatever app is focused
-* Uses **installed Windows “(Natural)” voices** when available
+* Uses **installed local Windows voices** (classic SAPI voices — see the correction note above; "(Natural)" voices are not reachable)
 * Can be triggered by:
 
   1. a **universal keyboard shortcut**
@@ -59,11 +71,11 @@ Primary UX should be **global hotkey**, which *does* meet the “anywhere select
      * Read clipboard text
      * Restore clipboard
 
-2. **Speech Synthesis (Local Neural Voices)**
+2. **Speech Synthesis (Local SAPI Voices)**
 
    * Use WinRT API: `Windows.Media.SpeechSynthesis.SpeechSynthesizer`
    * Enumerate voices: `SpeechSynthesizer.AllVoices`
-   * Prefer voices whose display name contains **"(Natural)"**
+   * ~~Prefer voices whose display name contains "(Natural)"~~ — removed; "(Natural)" voices never appear in `AllVoices` (see correction note above). Just list the available voices alphabetically.
 
 3. **Audio Playback + Speed**
 
@@ -97,7 +109,7 @@ Also ensure:
 
 Create a small window (can be hidden by default) with:
 
-* **Voice dropdown** (default to first “(Natural)” if available)
+* **Voice dropdown** (default to the first available voice — "(Natural)" preference removed, see correction note above)
 * **Speed control**
 
   * Slider min 0.1 max 4.0
@@ -180,10 +192,7 @@ Notes:
 
 * On startup: load `SpeechSynthesizer.AllVoices`
 * Populate dropdown with `DisplayName`
-* Choose default:
-
-  1. First voice containing `(Natural)`
-  2. else first available voice
+* Choose default: the first available voice (the former "first `(Natural)` voice" rule was removed — see correction note above)
 
 ### Speak flow
 
@@ -231,7 +240,7 @@ Create these (names matter):
 * [ ] App runs in tray; closing window does not exit (minimize-to-tray behavior)
 * [ ] Hotkey triggers “Read Selection”
 * [ ] Tray menu has “Read Selection”
-* [ ] Voice dropdown lists installed voices and prefers “(Natural)”
+* [ ] Voice dropdown lists installed voices (no "(Natural)" preference — see correction note above)
 * [ ] Speed adjustable:
 
   * slider range 0.1–4.0
@@ -289,5 +298,5 @@ Codex: provide a short README with these tests:
 ## Notes for Codex (edge cases to handle)
 
 * If `SpeechSynthesizer.AllVoices` returns none, show a clear error (“No Windows voices installed.”)
-* If `(Natural)` voices aren’t installed, still allow using available voices
+* ~~If `(Natural)` voices aren't installed, still allow using available voices~~ — moot; "(Natural)" voices are never available via this API (see correction note above)
 * If `PlaybackRate` throws or clamps silently, keep UI consistent but log actual applied rate in a debug log file

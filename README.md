@@ -46,10 +46,21 @@ dotnet run --project .\ReadSelectedTextTts\ReadSelectedTextTts.csproj
   - `Show/Hide`
   - `Exit`
 - Window controls:
-  - Voice dropdown (prefers `(Natural)` voice by default when available)
+  - Voice dropdown (lists the installed Windows voices; see note below)
   - Speed slider and `-0.1` / `+0.1` buttons (`0.1x` to `4.0x`)
   - `Read Selection`, `Read Clipboard`, `Read Test Text`, `Pause`, `Resume`, `Stop`, `Exit`
   - Built-in `Test Text` box for local playback verification without selecting text in another app
+
+## A note on voices
+
+The voice dropdown lists only the classic Windows SAPI voices (e.g. David, Mark,
+Zira). The Windows 11 "Natural" / "Natural HD" voices (Ava, Aria, etc.) **cannot
+be used by this app** — they are walled off from every public Windows TTS API and
+reserved for Narrator. This is by design, not a bug, and installing them will not
+make them appear. For the full investigation and better-voice alternatives (cloud
+APIs and bundled local models), see
+[`docs/windows-natural-voices-unavailable.md`](./docs/windows-natural-voices-unavailable.md)
+and [`docs/tts-options.html`](./docs/tts-options.html).
 
 ## Persistence
 

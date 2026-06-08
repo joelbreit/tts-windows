@@ -36,15 +36,16 @@ public sealed class TtsService : IDisposable
 
     public IReadOnlyList<VoiceOption> GetInstalledVoices()
     {
+        // NOTE: AllVoices only ever returns the legacy SAPI voices (David, Mark, Zira).
+        // Windows 11 "Natural"/"Natural HD" voices are NOT reachable through this (or any
+        // public) API — see docs/windows-natural-voices-unavailable.md. Do not add a
+        // "(Natural)" preference here; it can never match.
         var voices = SpeechSynthesizer.AllVoices
             .Select(voice => new VoiceOption(voice.DisplayName, voice.Id, voice))
-            .OrderBy(voice => voice.DisplayName.Contains("(Natural)", StringComparison.OrdinalIgnoreCase) ? 0 : 1)
-            .ThenBy(voice => voice.DisplayName, StringComparer.OrdinalIgnoreCase)
+            .OrderBy(voice => voice.DisplayName, StringComparer.OrdinalIgnoreCase)
             .ToList();
 
-        var naturalCount = voices.Count(voice =>
-            voice.DisplayName.Contains("(Natural)", StringComparison.OrdinalIgnoreCase));
-        Log.Inf($"Loaded {voices.Count} voice(s). Natural voices: {naturalCount}.");
+        Log.Inf($"Loaded {voices.Count} voice(s).");
         return voices;
     }
 
