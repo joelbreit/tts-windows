@@ -12,13 +12,32 @@ namespace ReadSelectedTextTts.Tts;
 /// Playback engine. Owns the shared <see cref="MediaPlayer"/> and rate control;
 /// delegates synthesis to the active <see cref="ITtsProvider"/> (resolved per call
 /// from the voice's provider id) and records usage telemetry.
+///
+/// Long reads are split by <see cref="TextChunker"/> and played as a pipeline: the
+/// first (short) chunk starts as soon as it arrives while the rest are synthesized in
+/// the background, so time-to-first-audio no longer scales with the length of the
+/// selection. <see cref="PrefetchDepth"/> requests are kept in flight at a time.
 /// </summary>
 public sealed class TtsService : IDisposable
 {
+    /// <summary>How many chunks are synthesized ahead of the one currently playing.</summary>
+    private const int PrefetchDepth = 3;
+
     private readonly MediaPlayer _mediaPlayer;
     private readonly TtsProviderRegistry _registry;
     private readonly TelemetryService _telemetry;
+    private readonly object _gate = new();
+    private PlaybackSession? _session;
     private IRandomAccessStream? _activeStream;
+    private MediaSource? _activeSource;
+    private double _rate = 1.0;
+
+    /// <summary>
+    /// True between a chunk ending and the next one loading. The finished chunk is still
+    /// the player's source at that point, so Resume must not call Play — it would replay
+    /// the chunk that just finished.
+    /// </summary>
+    private bool _awaitingChunk;
 
     public TtsService(TtsProviderRegistry registry, TelemetryService telemetry)
     {
@@ -29,13 +48,13 @@ public sealed class TtsService : IDisposable
 
         _mediaPlayer.MediaEnded += (_, _) =>
         {
-            Log.Dbg("Media playback ended.");
-            UpdatePlaybackState(false, false);
+            Log.Trc("Media item ended.");
+            OnMediaEnded();
         };
         _mediaPlayer.MediaFailed += (_, args) =>
         {
             Log.Err($"Media playback failed: {args.Error} ({args.ErrorMessage})");
-            UpdatePlaybackState(false, false);
+            Stop();
         };
     }
 
@@ -45,6 +64,9 @@ public sealed class TtsService : IDisposable
 
     public event EventHandler? PlaybackStateChanged;
 
+    /// <summary>Raised when a chunk after the first fails, so the UI can surface why audio stopped early.</summary>
+    public event EventHandler<string>? PlaybackError;
+
     public async Task SpeakAsync(
         string text,
         VoiceOption voice,
@@ -52,14 +74,15 @@ public sealed class TtsService : IDisposable
         double rate,
         string source)
     {
-        if (string.IsNullOrWhiteSpace(text))
+        var chunks = TextChunker.Split(text);
+        if (chunks.Count == 0)
         {
             Log.Wrn("SpeakAsync called with empty text.");
             return;
         }
 
         var provider = _registry.GetOrDefault(voice.ProviderId);
-        Log.Dbg($"Speak request: provider='{voice.ProviderId}', voice='{voice.DisplayName}', textLength={text.Length}, rate={rate:F1}x");
+        Log.Dbg($"Speak request: provider='{voice.ProviderId}', voice='{voice.DisplayName}', textLength={text.Length}, chunks={chunks.Count}, rate={rate:F1}x");
         Stop();
 
         var usageEvent = new TtsUsageEvent
@@ -68,25 +91,39 @@ public sealed class TtsService : IDisposable
             ProviderId = voice.ProviderId,
             VoiceId = voice.Id,
             CharacterCount = text.Length,
+            ChunkCount = chunks.Count,
             Source = source,
         };
         var stopwatch = Stopwatch.StartNew();
 
+        var session = new PlaybackSession(provider, voice, config, chunks);
+        lock (_gate)
+        {
+            _session = session;
+            _rate = rate;
+        }
+
         try
         {
-            var result = await provider.SynthesizeAsync(text, voice, config);
+            // Fire the first few requests together so chunk 2 is usually ready before
+            // chunk 1 finishes speaking.
+            for (var i = 0; i < PrefetchDepth && i < chunks.Count; i++)
+            {
+                session.Prefetch(i);
+            }
+
+            var first = await session.GetAsync(0);
             stopwatch.Stop();
             usageEvent.SynthesisMs = stopwatch.ElapsedMilliseconds;
 
-            _activeStream = result.Stream;
-            _mediaPlayer.Source = MediaSource.CreateFromStream(result.Stream, result.ContentType);
-            Log.Trc($"Synthesized stream. Size={result.Stream.Size}, ContentType={result.ContentType}, synthMs={usageEvent.SynthesisMs}");
+            if (!TryPlay(session, 0, first))
+            {
+                Log.Dbg("First chunk arrived after the session was superseded; discarding.");
+                return;
+            }
 
-            ApplyPlaybackRate(rate);
-            _mediaPlayer.Play();
-            UpdatePlaybackState(true, false);
             usageEvent.Success = true;
-            Log.Dbg("Playback started.");
+            Log.Dbg($"Playback started. Chunk 1/{chunks.Count}, timeToAudioMs={usageEvent.SynthesisMs}");
         }
         catch (Exception ex)
         {
@@ -94,6 +131,7 @@ public sealed class TtsService : IDisposable
             usageEvent.SynthesisMs = stopwatch.ElapsedMilliseconds;
             usageEvent.Success = false;
             usageEvent.Error = ex.Message;
+            EndSession(session);
             throw;
         }
         finally
@@ -123,19 +161,39 @@ public sealed class TtsService : IDisposable
             return;
         }
 
-        _mediaPlayer.Play();
         UpdatePlaybackState(true, false);
+
+        lock (_gate)
+        {
+            // If the pause landed in the gap between chunks, the pending chunk starts
+            // itself once it arrives; playing now would repeat the previous chunk.
+            if (!_awaitingChunk && _mediaPlayer.Source is not null)
+            {
+                _mediaPlayer.Play();
+            }
+        }
+
         Log.Dbg("Playback resumed.");
     }
 
     public void Stop()
     {
-        Log.Trc($"Stopping playback. IsPlaying={IsPlaying}, IsPaused={IsPaused}");
-        _mediaPlayer.Pause();
-        _mediaPlayer.Source = null;
+        PlaybackSession? session;
+        lock (_gate)
+        {
+            session = _session;
+            _session = null;
+        }
 
-        _activeStream?.Dispose();
-        _activeStream = null;
+        Log.Trc($"Stopping playback. IsPlaying={IsPlaying}, IsPaused={IsPaused}");
+        session?.Dispose();
+
+        lock (_gate)
+        {
+            _mediaPlayer.Pause();
+            _mediaPlayer.Source = null;
+            ReleaseCurrentItem();
+        }
 
         UpdatePlaybackState(false, false);
     }
@@ -146,6 +204,123 @@ public sealed class TtsService : IDisposable
         Stop();
         _mediaPlayer.Dispose();
         GC.SuppressFinalize(this);
+    }
+
+    /// <summary>
+    /// Loads a synthesized chunk into the player. Returns false if the session was
+    /// superseded or stopped while the chunk was in flight, in which case the audio is
+    /// left for the session's drain to release rather than interrupting what is playing now.
+    /// </summary>
+    private bool TryPlay(PlaybackSession session, int index, TtsSynthesisResult result)
+    {
+        lock (_gate)
+        {
+            if (!ReferenceEquals(_session, session))
+            {
+                return false;
+            }
+
+            // From here the player owns this stream, so the session must not free it too.
+            session.HandOff(index);
+            session.CurrentIndex = index;
+            _awaitingChunk = false;
+            var source = MediaSource.CreateFromStream(result.Stream, result.ContentType);
+            _mediaPlayer.Source = source;
+
+            ReleaseCurrentItem();
+            _activeStream = result.Stream;
+            _activeSource = source;
+
+            ApplyPlaybackRate(_rate);
+            Log.Trc($"Chunk {index + 1}/{session.ChunkCount} loaded. Size={result.Stream.Size}, ContentType={result.ContentType}");
+
+            if (!IsPaused)
+            {
+                _mediaPlayer.Play();
+            }
+        }
+
+        UpdatePlaybackState(true, IsPaused);
+        return true;
+    }
+
+    private void OnMediaEnded()
+    {
+        PlaybackSession? session;
+        lock (_gate)
+        {
+            session = _session;
+            _awaitingChunk = session is not null;
+        }
+
+        if (session is null)
+        {
+            UpdatePlaybackState(false, false);
+            return;
+        }
+
+        if (session.CurrentIndex + 1 >= session.ChunkCount)
+        {
+            Log.Dbg("All chunks played.");
+            EndSession(session);
+            return;
+        }
+
+        _ = AdvanceAsync(session);
+    }
+
+    /// <summary>Waits for the next chunk (usually already synthesized) and plays it.</summary>
+    private async Task AdvanceAsync(PlaybackSession session)
+    {
+        var next = session.CurrentIndex + 1;
+
+        // Keep the pipeline topped up as we consume it.
+        session.Prefetch(next + PrefetchDepth - 1);
+
+        try
+        {
+            var result = await session.GetAsync(next);
+            TryPlay(session, next, result);
+        }
+        catch (OperationCanceledException)
+        {
+            Log.Trc($"Chunk {next + 1} cancelled.");
+        }
+        catch (Exception ex)
+        {
+            Log.Err($"Chunk {next + 1}/{session.ChunkCount} failed: {ex}");
+            EndSession(session);
+            PlaybackError?.Invoke(this, $"Read stopped after part {next} of {session.ChunkCount}: {ex.Message}");
+        }
+    }
+
+    /// <summary>Tears down a session, but only if it is still the active one.</summary>
+    private void EndSession(PlaybackSession session)
+    {
+        lock (_gate)
+        {
+            if (!ReferenceEquals(_session, session))
+            {
+                return;
+            }
+
+            _session = null;
+            _mediaPlayer.Source = null;
+            ReleaseCurrentItem();
+        }
+
+        session.Dispose();
+        UpdatePlaybackState(false, false);
+    }
+
+    /// <summary>Releases the stream and media source backing the chunk that just finished.</summary>
+    private void ReleaseCurrentItem()
+    {
+        _awaitingChunk = false;
+        _activeSource?.Dispose();
+        _activeSource = null;
+        _activeStream?.Dispose();
+        _activeStream = null;
     }
 
     private void ApplyPlaybackRate(double requestedRate)
@@ -163,7 +338,7 @@ public sealed class TtsService : IDisposable
             }
             else
             {
-                Log.Dbg($"Playback rate applied: {appliedRate:F2}x.");
+                Log.Trc($"Playback rate applied: {appliedRate:F2}x.");
             }
         }
         catch (Exception ex)
@@ -183,9 +358,137 @@ public sealed class TtsService : IDisposable
 
     private void UpdatePlaybackState(bool isPlaying, bool isPaused)
     {
+        if (IsPlaying == isPlaying && IsPaused == isPaused)
+        {
+            return;
+        }
+
         IsPlaying = isPlaying;
         IsPaused = isPaused;
         PlaybackStateChanged?.Invoke(this, EventArgs.Empty);
         Log.Trc($"Playback state updated: IsPlaying={isPlaying}, IsPaused={isPaused}");
+    }
+
+    /// <summary>
+    /// One read request: its chunks, the synthesis tasks in flight for them, and the
+    /// cancellation that unwinds the lot when the user stops or starts another read.
+    /// </summary>
+    private sealed class PlaybackSession : IDisposable
+    {
+        private readonly ITtsProvider _provider;
+        private readonly VoiceOption _voice;
+        private readonly IProviderConfig _config;
+        private readonly IReadOnlyList<string> _chunks;
+        private readonly Task<TtsSynthesisResult>?[] _pending;
+        private readonly bool[] _handedOff;
+        private readonly CancellationTokenSource _cts = new();
+        private readonly object _lock = new();
+        private bool _disposed;
+
+        public PlaybackSession(
+            ITtsProvider provider,
+            VoiceOption voice,
+            IProviderConfig config,
+            IReadOnlyList<string> chunks)
+        {
+            _provider = provider;
+            _voice = voice;
+            _config = config;
+            _chunks = chunks;
+            _pending = new Task<TtsSynthesisResult>?[chunks.Count];
+            _handedOff = new bool[chunks.Count];
+        }
+
+        /// <summary>Index of the chunk currently loaded in the player.</summary>
+        public int CurrentIndex { get; set; }
+
+        public int ChunkCount => _chunks.Count;
+
+        /// <summary>Starts synthesis for a chunk if it has not been requested yet. No-op out of range.</summary>
+        public void Prefetch(int index)
+        {
+            if (index < 0 || index >= _chunks.Count)
+            {
+                return;
+            }
+
+            lock (_lock)
+            {
+                if (_disposed || _pending[index] is not null)
+                {
+                    return;
+                }
+
+                Log.Trc($"Prefetching chunk {index + 1}/{_chunks.Count} ({_chunks[index].Length} chars).");
+                _pending[index] = _provider.SynthesizeAsync(_chunks[index], _voice, _config, _cts.Token);
+            }
+        }
+
+        public Task<TtsSynthesisResult> GetAsync(int index)
+        {
+            Prefetch(index);
+
+            lock (_lock)
+            {
+                return _pending[index]
+                       ?? Task.FromCanceled<TtsSynthesisResult>(new CancellationToken(true));
+            }
+        }
+
+        /// <summary>
+        /// Transfers ownership of a chunk's audio to the player. Handed-off streams are
+        /// skipped by the drain, because the player disposes them when it moves on.
+        /// </summary>
+        public void HandOff(int index)
+        {
+            lock (_lock)
+            {
+                _handedOff[index] = true;
+            }
+        }
+
+        public void Dispose()
+        {
+            Task<TtsSynthesisResult>[] pending;
+            lock (_lock)
+            {
+                if (_disposed)
+                {
+                    return;
+                }
+
+                _disposed = true;
+                pending = _pending
+                    .Where((task, index) => task is not null && !_handedOff[index])
+                    .Select(task => task!)
+                    .ToArray();
+            }
+
+            _cts.Cancel();
+            _ = DrainAsync(pending);
+        }
+
+        /// <summary>
+        /// Lets the cancelled requests unwind off the caller's thread: observes their faults
+        /// so they never surface as unobserved exceptions, frees audio that arrived too late,
+        /// and only then disposes the token source the in-flight requests are still holding.
+        /// </summary>
+        private async Task DrainAsync(Task<TtsSynthesisResult>[] pending)
+        {
+            foreach (var task in pending)
+            {
+                try
+                {
+                    var result = await task.ConfigureAwait(false);
+                    result.Stream.Dispose();
+                }
+                catch
+                {
+                    // Cancelled or failed; there is no audio to release.
+                }
+            }
+
+            _cts.Dispose();
+        }
     }
 }

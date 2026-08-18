@@ -50,6 +50,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         _activeHotkeyKey = _settings.HotkeyKey;
 
         _ttsService.PlaybackStateChanged += OnPlaybackStateChanged;
+        _ttsService.PlaybackError += OnPlaybackError;
 
         ReadSelectionCommand = new AsyncRelayCommand(ReadSelectionAsync, () => SelectedVoice is not null);
         ReadClipboardCommand = new AsyncRelayCommand(ReadClipboardAsync, () => SelectedVoice is not null);
@@ -297,6 +298,22 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
         SelectedVoice = ResolveSelectedVoice(descriptor.Id);
         Log.Inf($"Active provider '{descriptor.Id}', voice '{SelectedVoice?.DisplayName ?? "<none>"}'.");
+
+        // Pay the DNS/TLS handshake now rather than in front of the first read's audio.
+        _ = WarmUpAsync(provider, config);
+    }
+
+    private static async Task WarmUpAsync(ITtsProvider provider, IProviderConfig config)
+    {
+        try
+        {
+            await provider.WarmUpAsync(config);
+            Log.Trc($"Warmed up provider '{provider.Descriptor.Id}'.");
+        }
+        catch (Exception ex)
+        {
+            Log.Trc($"Warm-up for '{provider.Descriptor.Id}' failed (harmless): {ex.Message}");
+        }
     }
 
     /// <summary>Creates a settings view model sharing this VM's live settings and save path.</summary>
@@ -380,6 +397,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         _disposed = true;
         Log.Inf("Disposing MainViewModel.");
         _ttsService.PlaybackStateChanged -= OnPlaybackStateChanged;
+        _ttsService.PlaybackError -= OnPlaybackError;
         _ttsService.Dispose();
         _saveLock.Dispose();
         GC.SuppressFinalize(this);
@@ -548,6 +566,21 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         }
 
         return Voices.FirstOrDefault();
+    }
+
+    /// <summary>A chunk after the first failed, so playback stopped part-way through the text.</summary>
+    private void OnPlaybackError(object? sender, string message)
+    {
+        Log.Err($"Playback error: {message}");
+
+        var dispatcher = System.Windows.Application.Current?.Dispatcher;
+        if (dispatcher is null || dispatcher.CheckAccess())
+        {
+            ShowStatus(message);
+            return;
+        }
+
+        dispatcher.Invoke(() => ShowStatus(message));
     }
 
     private void OnPlaybackStateChanged(object? sender, EventArgs e)

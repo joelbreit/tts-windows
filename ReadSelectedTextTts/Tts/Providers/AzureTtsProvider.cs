@@ -21,7 +21,7 @@ public sealed class AzureTtsProvider : ITtsProvider
     private const string RegionField = "Region";
     private const string OutputFormat = "audio-24khz-48kbitrate-mono-mp3";
 
-    private static readonly HttpClient Http = new() { Timeout = TimeSpan.FromSeconds(30) };
+    private static readonly HttpClient Http = TtsHttp.Create(TimeSpan.FromSeconds(30));
     private static readonly JsonSerializerOptions JsonOptions = new() { PropertyNameCaseInsensitive = true };
 
     public TtsProviderDescriptor Descriptor { get; } = new()
@@ -32,7 +32,7 @@ public sealed class AzureTtsProvider : ITtsProvider
                   "with ~300 voices across 140+ languages and low latency. The 500k chars/month free " +
                   "(F0) tier covers typical personal use at no cost.",
         Quality = "★★★★",
-        Latency = "~100–200ms",
+        Latency = "~100–200ms to first word",
         Cost = "$16 / 1M chars (free tier: 500k/mo)",
         FreeTier = "500k chars/month (F0)",
         IsOffline = false,
@@ -121,6 +121,20 @@ public sealed class AzureTtsProvider : ITtsProvider
         var bytes = await response.Content.ReadAsByteArrayAsync(cancellationToken);
         Log.Trc($"Azure synthesized {bytes.Length} bytes of MP3 for voice '{voice.Id}'.");
         return new TtsSynthesisResult { Stream = AudioStreams.FromBytes(bytes), ContentType = "audio/mpeg" };
+    }
+
+    public Task WarmUpAsync(IProviderConfig config, CancellationToken cancellationToken = default)
+    {
+        var region = config.GetOption(RegionField);
+        if (string.IsNullOrWhiteSpace(region))
+        {
+            return Task.CompletedTask;
+        }
+
+        return TtsHttp.WarmUpAsync(
+            Http,
+            $"https://{region.Trim()}.tts.speech.microsoft.com/cognitiveservices/v1",
+            cancellationToken);
     }
 
     private static (string Key, string Region) RequireCredentials(IProviderConfig config)

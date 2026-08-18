@@ -18,10 +18,21 @@ public interface ITtsProvider
     /// <summary>Enumerates the voices available for the given configuration.</summary>
     Task<IReadOnlyList<VoiceOption>> GetVoicesAsync(IProviderConfig config);
 
-    /// <summary>Synthesizes <paramref name="text"/> with <paramref name="voice"/>.</summary>
+    /// <summary>
+    /// Synthesizes <paramref name="text"/> with <paramref name="voice"/>. Callers may have
+    /// several of these in flight at once for consecutive chunks of one read, so
+    /// implementations must be safe to call concurrently.
+    /// </summary>
     Task<TtsSynthesisResult> SynthesizeAsync(
         string text,
         VoiceOption voice,
         IProviderConfig config,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Optional: opens the network connection ahead of the first read so the DNS/TLS
+    /// handshake isn't on the critical path. Best effort — callers ignore failures.
+    /// </summary>
+    Task WarmUpAsync(IProviderConfig config, CancellationToken cancellationToken = default) =>
+        Task.CompletedTask;
 }

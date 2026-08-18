@@ -37,7 +37,7 @@ public sealed class OpenAiTtsProvider : ITtsProvider
         ("verse", "Versatile, natural"),
     ];
 
-    private static readonly HttpClient Http = new() { Timeout = TimeSpan.FromSeconds(30) };
+    private static readonly HttpClient Http = TtsHttp.Create(TimeSpan.FromSeconds(30));
 
     public TtsProviderDescriptor Descriptor { get; } = new()
     {
@@ -47,7 +47,7 @@ public sealed class OpenAiTtsProvider : ITtsProvider
                   "Pay-as-you-go (no free tier), but only ~$1–2/month at personal-use volumes. " +
                   "If you already have an OpenAI key, this is the lightest option to run.",
         Quality = "★★★★",
-        Latency = "~300–600ms",
+        Latency = "~300–600ms to first word",
         Cost = "$15/1M (tts-1) · token-based (gpt-4o-mini-tts)",
         FreeTier = null,
         IsOffline = false,
@@ -71,7 +71,8 @@ public sealed class OpenAiTtsProvider : ITtsProvider
                 IsRequired = false,
                 DefaultValue = DefaultModel,
                 Placeholder = DefaultModel,
-                HelpText = "tts-1 (fast, cheap), tts-1-hd (higher quality), or gpt-4o-mini-tts (newest).",
+                HelpText = "tts-1 starts speaking fastest, tts-1-hd sounds best, gpt-4o-mini-tts is " +
+                           "newest but slowest to first audio. Switch to tts-1 if reads feel sluggish.",
             },
         ],
     };
@@ -129,6 +130,9 @@ public sealed class OpenAiTtsProvider : ITtsProvider
         Log.Trc($"OpenAI synthesized {bytes.Length} bytes of MP3 for voice '{voice.Id}' (model '{model}').");
         return new TtsSynthesisResult { Stream = AudioStreams.FromBytes(bytes), ContentType = "audio/mpeg" };
     }
+
+    public Task WarmUpAsync(IProviderConfig config, CancellationToken cancellationToken = default) =>
+        TtsHttp.WarmUpAsync(Http, Endpoint, cancellationToken);
 
     private static async Task EnsureSuccessAsync(HttpResponseMessage response)
     {
