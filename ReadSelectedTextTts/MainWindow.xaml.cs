@@ -1,4 +1,3 @@
-using System.ComponentModel;
 using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Interop;
@@ -7,7 +6,6 @@ using ReadSelectedTextTts.Hotkeys;
 using ReadSelectedTextTts.Selection;
 using ReadSelectedTextTts.Settings;
 using ReadSelectedTextTts.Telemetry;
-using ReadSelectedTextTts.Tray;
 using ReadSelectedTextTts.Tts;
 using ReadSelectedTextTts.ViewModels;
 using Log = Logger.Logger;
@@ -37,11 +35,9 @@ public partial class MainWindow : Window
     private static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int attrValue, int attrSize);
 
     private readonly MainViewModel _viewModel;
-    private readonly TrayIconManager _trayIconManager;
     private GlobalHotkey? _selectionHotkey;
     private GlobalHotkey? _clipboardHotkey;
     private (HotkeyModifiers Modifiers, uint Key)? _activeSelectionHotkey;
-    private bool _isExiting;
     private bool _initialized;
 
     public MainWindow()
@@ -59,17 +55,8 @@ public partial class MainWindow : Window
         _viewModel.SettingsRequested += OnSettingsRequested;
         DataContext = _viewModel;
 
-        _trayIconManager = new TrayIconManager();
-        _trayIconManager.ReadSelectionRequested += OnReadSelectionRequested;
-        _trayIconManager.ReadClipboardRequested += OnReadClipboardRequested;
-        _trayIconManager.ToggleWindowRequested += OnToggleWindowRequested;
-        _trayIconManager.ExitRequested += OnExitRequested;
-
-        _viewModel.NotificationRequested += OnNotificationRequested;
-
         Loaded += OnLoaded;
-        Closing += OnClosing;
-        StateChanged += OnStateChanged;
+        Closed += OnClosed;
         Log.Inf("MainWindow initialized.");
     }
 
@@ -86,7 +73,6 @@ public partial class MainWindow : Window
 
         await _viewModel.InitializeAsync();
         RegisterHotkeys();
-        _trayIconManager.SetWindowVisible(true);
     }
 
     private void RegisterHotkeys()
@@ -129,14 +115,13 @@ public partial class MainWindow : Window
             _viewModel.SetActiveHotkey((uint)fallback.Modifiers, fallback.Key, persist: true);
             _selectionHotkey = fallbackHotkey;
             _activeSelectionHotkey = fallback;
-            _trayIconManager.ShowNotification(
-                "Read Selected Text TTS",
+            _viewModel.ShowStatus(
                 $"Configured hotkey unavailable. Using {FormatHotkey((uint)fallback.Modifiers, fallback.Key)}.");
             return;
         }
 
         Log.Err("Unable to register any global hotkey.");
-        _trayIconManager.ShowNotification("Read Selected Text TTS", "Unable to register any global hotkey.");
+        _viewModel.ShowStatus("Unable to register any global hotkey.");
     }
 
     private void RegisterClipboardHotkey()
@@ -181,14 +166,13 @@ public partial class MainWindow : Window
                 $"Configured clipboard hotkey unavailable. Falling back to {FormatHotkey((uint)fallback.Modifiers, fallback.Key)}");
             _clipboardHotkey = fallbackHotkey;
             _viewModel.SetActiveClipboardHotkey((uint)fallback.Modifiers, fallback.Key);
-            _trayIconManager.ShowNotification(
-                "Read Selected Text TTS",
+            _viewModel.ShowStatus(
                 $"Clipboard hotkey unavailable. Using {FormatHotkey((uint)fallback.Modifiers, fallback.Key)}.");
             return;
         }
 
         Log.Wrn("Unable to register clipboard hotkey.");
-        _trayIconManager.ShowNotification("Read Selected Text TTS", "Unable to register clipboard hotkey.");
+        _viewModel.ShowStatus("Unable to register clipboard hotkey.");
     }
 
     private bool TryRegisterHotkeyCandidate(
@@ -228,29 +212,6 @@ public partial class MainWindow : Window
         await _viewModel.ReadClipboardAsync();
     }
 
-    private async void OnReadSelectionRequested(object? sender, EventArgs e)
-    {
-        Log.Dbg("Tray menu requested Read Selection.");
-        await _viewModel.ReadSelectionAsync();
-    }
-
-    private async void OnReadClipboardRequested(object? sender, EventArgs e)
-    {
-        Log.Dbg("Tray menu requested Read Clipboard.");
-        await _viewModel.ReadClipboardAsync();
-    }
-
-    private void OnToggleWindowRequested(object? sender, EventArgs e)
-    {
-        ToggleWindowVisibility();
-    }
-
-    private void OnExitRequested(object? sender, EventArgs e)
-    {
-        Log.Inf("Tray menu requested Exit.");
-        ExitApplication();
-    }
-
     private void OnSettingsRequested(object? sender, EventArgs e)
     {
         OpenSettingsWindow();
@@ -260,91 +221,19 @@ public partial class MainWindow : Window
     {
         Log.Inf("Opening Settings window.");
         var settingsViewModel = _viewModel.CreateSettingsViewModel();
-        var window = new SettingsWindow(settingsViewModel);
-        if (IsVisible)
-        {
-            window.Owner = this;
-        }
+        var window = new SettingsWindow(settingsViewModel) { Owner = this };
 
         window.ShowDialog();
         await _viewModel.RefreshAfterSettingsAsync();
     }
 
-    private void ExitButton_OnClick(object sender, RoutedEventArgs e)
+    private void OnClosed(object? sender, EventArgs e)
     {
-        Log.Inf("Exit button clicked.");
-        ExitApplication();
-    }
-
-    private void OnNotificationRequested(object? sender, string message)
-    {
-        Log.Inf($"User notification: {message}");
-        _trayIconManager.ShowNotification("Read Selected Text TTS", message);
-    }
-
-    private void OnStateChanged(object? sender, EventArgs e)
-    {
-        if (WindowState == WindowState.Minimized)
-        {
-            Log.Dbg("MainWindow minimized; hiding to tray.");
-            HideWindowToTray();
-        }
-    }
-
-    private void OnClosing(object? sender, CancelEventArgs e)
-    {
-        if (_isExiting)
-        {
-            return;
-        }
-
-        e.Cancel = true;
-        Log.Dbg("MainWindow close intercepted; hiding to tray.");
-        HideWindowToTray();
-    }
-
-    private void ToggleWindowVisibility()
-    {
-        if (IsVisible)
-        {
-            Log.Dbg("Toggle window requested: currently visible, hiding.");
-            HideWindowToTray();
-            return;
-        }
-
-        Log.Dbg("Toggle window requested: currently hidden, showing.");
-        ShowWindow();
-    }
-
-    private void ShowWindow()
-    {
-        Log.Dbg("Showing main window.");
-        Show();
-        ShowInTaskbar = true;
-        WindowState = WindowState.Normal;
-        Activate();
-        _trayIconManager.SetWindowVisible(true);
-    }
-
-    private void HideWindowToTray()
-    {
-        Log.Dbg("Hiding main window to tray.");
-        Hide();
-        ShowInTaskbar = false;
-        _trayIconManager.SetWindowVisible(false);
-    }
-
-    private void ExitApplication()
-    {
-        Log.Inf("ExitApplication invoked.");
-        _isExiting = true;
+        Log.Inf("MainWindow closed; shutting down.");
 
         _selectionHotkey?.Dispose();
         _clipboardHotkey?.Dispose();
         _viewModel.Dispose();
-        _trayIconManager.Dispose();
-
-        System.Windows.Application.Current.Shutdown();
     }
 
     private void ApplyDarkTitleBar()

@@ -12,6 +12,15 @@
 > for the full investigation and [`docs/tts-options.html`](./docs/tts-options.html)
 > for better-voice alternatives.
 
+> **⚠️ CORRECTION (2026-08-17): The tray / minimize-to-tray premise below is wrong.**
+> The app is now a **normal desktop window**: minimize goes to the taskbar, closing
+> the window exits the app, and there is no tray icon or tray context menu
+> (`Tray/TrayIconManager.cs` has been deleted). Global hotkeys are the only
+> background trigger, and they only run while the window is open. User notices that
+> used to be tray balloon tips now render in a status row at the bottom of the main
+> window (`MainViewModel.StatusMessage`). Tray references in the sections below are
+> historical record — **do not act on them.**
+
 ### Goal
 
 Build a Windows desktop app for **personal use** that:

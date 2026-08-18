@@ -31,6 +31,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     private uint _activeClipboardHotkeyKey = 0x43;
     private bool _isPlaying;
     private bool _isPaused;
+    private string _statusMessage = string.Empty;
     private bool _disposed;
 
     public MainViewModel(
@@ -60,8 +61,6 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         DecreaseSpeedCommand = new RelayCommand(DecreaseSpeed, () => Speed > 0.1);
         OpenSettingsCommand = new RelayCommand(() => SettingsRequested?.Invoke(this, EventArgs.Empty));
     }
-
-    public event EventHandler<string>? NotificationRequested;
 
     public event EventHandler? SettingsRequested;
 
@@ -191,6 +190,21 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         }
     }
 
+    /// <summary>Latest notice for the status row at the bottom of the window. Empty hides the row.</summary>
+    public string StatusMessage
+    {
+        get => _statusMessage;
+        private set
+        {
+            if (SetProperty(ref _statusMessage, value))
+            {
+                OnPropertyChanged(nameof(HasStatus));
+            }
+        }
+    }
+
+    public bool HasStatus => !string.IsNullOrWhiteSpace(_statusMessage);
+
     public uint HotkeyModifiers => _settings.HotkeyModifiers;
 
     public uint HotkeyKey => _settings.HotkeyKey;
@@ -251,7 +265,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         if (descriptor.RequiresApiKey && !provider.IsConfigured(config))
         {
             Log.Wrn($"Provider '{descriptor.Id}' is not configured.");
-            NotificationRequested?.Invoke(this, $"{descriptor.DisplayName} needs setup. Open Settings to add an API key.");
+            ShowStatus($"{descriptor.DisplayName} needs setup. Open Settings to add an API key.");
             RaiseCommandCanExecuteChanged();
             return;
         }
@@ -264,7 +278,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         catch (Exception ex)
         {
             Log.Err($"Failed to load voices for '{descriptor.Id}': {ex}");
-            NotificationRequested?.Invoke(this, $"Failed to load {descriptor.DisplayName} voices: {ex.Message}");
+            ShowStatus($"Failed to load {descriptor.DisplayName} voices: {ex.Message}");
             RaiseCommandCanExecuteChanged();
             return;
         }
@@ -277,7 +291,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         if (Voices.Count == 0)
         {
             Log.Wrn($"Provider '{descriptor.Id}' returned no voices.");
-            NotificationRequested?.Invoke(this, $"{descriptor.DisplayName} has no available voices.");
+            ShowStatus($"{descriptor.DisplayName} has no available voices.");
             return;
         }
 
@@ -314,7 +328,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             if (string.IsNullOrWhiteSpace(selectedText))
             {
                 Log.Wrn("ReadSelection found no text.");
-                NotificationRequested?.Invoke(this, "No selected text found. Select text in another app or use Read Test Text.");
+                ShowStatus("No selected text found. Select text in another app or use Read Test Text.");
                 return;
             }
 
@@ -324,7 +338,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         catch (Exception ex)
         {
             Log.Err($"ReadSelection failed: {ex}");
-            NotificationRequested?.Invoke(this, $"Read failed: {ex.Message}");
+            ShowStatus($"Read failed: {ex.Message}");
         }
     }
 
@@ -342,7 +356,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             if (string.IsNullOrWhiteSpace(clipboardText))
             {
                 Log.Wrn("ReadClipboard found no text.");
-                NotificationRequested?.Invoke(this, "Clipboard does not contain text.");
+                ShowStatus("Clipboard does not contain text.");
                 return;
             }
 
@@ -352,7 +366,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         catch (Exception ex)
         {
             Log.Err($"ReadClipboard failed: {ex}");
-            NotificationRequested?.Invoke(this, $"Read failed: {ex.Message}");
+            ShowStatus($"Read failed: {ex.Message}");
         }
     }
 
@@ -369,6 +383,17 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         _ttsService.Dispose();
         _saveLock.Dispose();
         GC.SuppressFinalize(this);
+    }
+
+    /// <summary>Posts a message to the window's status row.</summary>
+    public void ShowStatus(string message)
+    {
+        StatusMessage = message;
+    }
+
+    public void ClearStatus()
+    {
+        StatusMessage = string.Empty;
     }
 
     public void SetActiveHotkey(uint modifiers, uint key, bool persist)
@@ -400,6 +425,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
     private async Task SpeakAsync(string text, string source)
     {
+        ClearStatus();
         var voice = SelectedVoice!;
         var config = _registry.ConfigFor(voice.ProviderId, _settings);
         await _ttsService.SpeakAsync(text, voice, config, Speed, source);
@@ -414,7 +440,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             return true;
         }
 
-        NotificationRequested?.Invoke(this, "No voice available. Open Settings to configure a provider.");
+        ShowStatus("No voice available. Open Settings to configure a provider.");
         return false;
     }
 
@@ -448,7 +474,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
         if (string.IsNullOrWhiteSpace(ManualText))
         {
-            NotificationRequested?.Invoke(this, "Enter test text first.");
+            ShowStatus("Enter test text first.");
             return;
         }
 
@@ -460,7 +486,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         catch (Exception ex)
         {
             Log.Err($"ReadTestText failed: {ex}");
-            NotificationRequested?.Invoke(this, $"Read failed: {ex.Message}");
+            ShowStatus($"Read failed: {ex.Message}");
         }
     }
 

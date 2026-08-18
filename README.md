@@ -1,6 +1,6 @@
 # ReadSelectedTextTts
 
-Windows tray app that reads currently selected text from the active app using local Windows voices.
+Windows desktop app that reads currently selected text from the active app using local Windows voices or a cloud TTS provider.
 
 ## Requirements
 
@@ -40,17 +40,15 @@ dotnet run --project .\ReadSelectedTextTts\ReadSelectedTextTts.csproj
   - If unavailable on your system (common due OS shortcuts), the app falls back to `Ctrl + Alt + R`.
 - Global clipboard hotkey: `Win + Alt + C`
   - If unavailable on your system, the app falls back to `Ctrl + Alt + C`.
-- Tray menu:
-  - `Read Selection`
-  - `Read Clipboard`
-  - `Show/Hide`
-  - `Exit`
+- Window behavior: a normal desktop window. Minimize keeps it in the taskbar and the
+  global hotkeys keep working; closing the window exits the app.
 - Window controls:
   - TTS provider dropdown + `⚙ Settings` button (see "TTS providers" below)
   - Voice dropdown (lists the active provider's voices)
   - Speed slider and `-0.1` / `+0.1` buttons (`0.1x` to `4.0x`)
-  - `Read Selection`, `Read Clipboard`, `Read Test Text`, `Pause`, `Resume`, `Stop`, `Exit`
+  - `Read Selection`, `Read Clipboard`, `Read Test Text`, `Pause`, `Resume`, `Stop`
   - Built-in `Test Text` box for local playback verification without selecting text in another app
+  - Status row at the bottom for notices (no selected text, hotkey fallback, read failures)
 
 ## TTS providers
 

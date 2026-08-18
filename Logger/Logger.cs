@@ -128,29 +128,71 @@ public static class Logger
 		lock (_writeLock)
 		{
 			_fileWriter?.Dispose();
-			Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(path))!);
-			_logFilePath = path;
+			_fileWriter = null;
 
-			// Always start fresh unless explicitly appending
-			if (append && File.Exists(path))
+			try
 			{
-				_logLineCount = File.ReadAllLines(path).Length;
+				Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(path))!);
+				_logFilePath = path;
 
-				// Trim if file is too large
-				if (_logLineCount > MAX_LOG_LINES)
+				// Always start fresh unless explicitly appending
+				if (append && File.Exists(path))
 				{
-					TrimLogFile();
-				}
+					_logLineCount = ReadLogLines(path).Length;
 
-				_fileWriter = new StreamWriter(path, true) { AutoFlush = true };
+					// Trim if file is too large
+					if (_logLineCount > MAX_LOG_LINES)
+					{
+						TrimLogFile();
+					}
+
+					_fileWriter = OpenLogWriter(path, append: true);
+				}
+				else
+				{
+					// Start with a fresh file
+					_logLineCount = 0;
+					_fileWriter = OpenLogWriter(path, append: false);
+				}
 			}
-			else
+			catch (Exception ex)
 			{
-				// Start with a fresh file
+				// A locked or unwritable log file must never take the host app down;
+				// keep running with console-only logging instead.
+				_fileWriter?.Dispose();
+				_fileWriter = null;
+				_logFilePath = null;
 				_logLineCount = 0;
-				_fileWriter = new StreamWriter(path, false) { AutoFlush = true };
+				Console.WriteLine($"Warning: Failed to open log file '{path}': {ex.Message}");
 			}
 		}
+	}
+
+	/// <summary>Opens the log file sharing read/write access so other processes can log to it too.</summary>
+	private static StreamWriter OpenLogWriter(string path, bool append)
+	{
+		var stream = new FileStream(
+			path,
+			append ? FileMode.Append : FileMode.Create,
+			FileAccess.Write,
+			FileShare.ReadWrite);
+
+		return new StreamWriter(stream) { AutoFlush = true };
+	}
+
+	/// <summary>Reads the log file without requiring exclusive access.</summary>
+	private static string[] ReadLogLines(string path)
+	{
+		using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+		using var reader = new StreamReader(stream);
+
+		var lines = new List<string>();
+		while (reader.ReadLine() is { } line)
+		{
+			lines.Add(line);
+		}
+
+		return lines.ToArray();
 	}
 
 	public static void Close()
@@ -443,8 +485,12 @@ public static class Logger
 					TrimLogFile();
 				}
 
-				_fileWriter.WriteLine(StripAnsi(lineText));
-				_logLineCount++;
+				// Trimming can drop the writer if the rewrite fails.
+				if (_fileWriter is not null)
+				{
+					_fileWriter.WriteLine(StripAnsi(lineText));
+					_logLineCount++;
+				}
 			}
 		}
 	}
@@ -532,7 +578,7 @@ public static class Logger
 
 		try
 		{
-			var lines = File.ReadAllLines(_logFilePath);
+			var lines = ReadLogLines(_logFilePath);
 			var linesToKeep = MAX_LOG_LINES / 2;
 
 			if (lines.Length <= linesToKeep)
@@ -544,8 +590,9 @@ public static class Logger
 
 			// Close current writer, rewrite file, reopen writer
 			_fileWriter?.Dispose();
+			_fileWriter = null;
 			File.WriteAllLines(_logFilePath, trimmedLines);
-			_fileWriter = new StreamWriter(_logFilePath, true) { AutoFlush = true };
+			_fileWriter = OpenLogWriter(_logFilePath, append: true);
 			_logLineCount = linesToKeep;
 		}
 		catch (Exception ex)

@@ -30,6 +30,7 @@
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="10"/>
             <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
         <!-- Hotkey Badges + Playback Status -->
@@ -150,20 +151,22 @@
                     Command="{Binding ReadTestTextCommand}"/>
         </UniformGrid>
 
-        <!-- Playback Controls + Exit -->
-        <DockPanel Grid.Row="12">
-            <Button DockPanel.Dock="Right"
-                    Content="Exit"
-                    Style="{StaticResource DangerButton}"
-                    Click="ExitButton_OnClick"/>
-            <StackPanel Orientation="Horizontal">
-                <Button Content="Pause" Margin="0,0,6,0" Padding="16,8"
-                        Command="{Binding PauseCommand}"/>
-                <Button Content="Resume" Margin="0,0,6,0" Padding="16,8"
-                        Command="{Binding ResumeCommand}"/>
-                <Button Content="Stop" Padding="16,8"
-                        Command="{Binding StopCommand}"/>
-            </StackPanel>
-        </DockPanel>
+        <!-- Playback Controls -->
+        <StackPanel Grid.Row="12" Orientation="Horizontal">
+            <Button Content="Pause" Margin="0,0,6,0" Padding="16,8"
+                    Command="{Binding PauseCommand}"/>
+            <Button Content="Resume" Margin="0,0,6,0" Padding="16,8"
+                    Command="{Binding ResumeCommand}"/>
+            <Button Content="Stop" Padding="16,8"
+                    Command="{Binding StopCommand}"/>
+        </StackPanel>
+
+        <!-- Status Message -->
+        <Border Grid.Row="13" Margin="0,12,0,0" Padding="10,7"
+                Background="{StaticResource SurfaceBrush}" CornerRadius="4"
+                Visibility="{Binding HasStatus, Converter={StaticResource BoolToVis}}">
+            <TextBlock Text="{Binding StatusMessage}" FontSize="12"
+                       Foreground="{StaticResource PausedBrush}" TextWrapping="Wrap"/>
+        </Border>
     </Grid>
 </Window>
