@@ -82,25 +82,38 @@ public partial class MainWindow : Window
         RegisterClipboardHotkey();
     }
 
+    /// <summary>
+    /// Registers the selection hotkey, preferring the one saved in settings and falling
+    /// back only for this session.
+    ///
+    /// The fallback must NOT be persisted. A conflict here is usually transient — another
+    /// copy of this app still holding the combo, or some other app that isn't always
+    /// running — and writing the fallback into settings made it the new "preferred"
+    /// hotkey, so the original was never retried again. That ratcheted the shortcut
+    /// downwards one step per conflict and never recovered. Keeping the user's preference
+    /// untouched means every launch retries it, so the drift heals itself.
+    /// </summary>
     private void RegisterSelectionHotkey()
     {
         _selectionHotkey?.Dispose();
         _selectionHotkey = null;
         _activeSelectionHotkey = null;
 
-        var configured = ((HotkeyModifiers)_viewModel.HotkeyModifiers, _viewModel.HotkeyKey);
-        if (TryRegisterHotkeyCandidate(configured.Item1, configured.Item2, OnSelectionHotkeyPressed, out var configuredHotkey))
+        var preferred = ((HotkeyModifiers)_viewModel.HotkeyModifiers, _viewModel.HotkeyKey);
+        if (TryRegisterHotkeyCandidate(preferred.Item1, preferred.Item2, OnSelectionHotkeyPressed, out var preferredHotkey))
         {
-            Log.Inf($"Registered configured hotkey: {FormatHotkey((uint)configured.Item1, configured.Item2)}");
-            _viewModel.SetActiveHotkey((uint)configured.Item1, configured.Item2, persist: false);
-            _selectionHotkey = configuredHotkey;
-            _activeSelectionHotkey = configured;
+            Log.Inf($"Registered preferred hotkey: {FormatHotkey((uint)preferred.Item1, preferred.Item2)}");
+            _viewModel.SetActiveHotkey((uint)preferred.Item1, preferred.Item2, persist: false);
+            _selectionHotkey = preferredHotkey;
+            _activeSelectionHotkey = preferred;
             return;
         }
 
+        var preferredDisplay = FormatHotkey((uint)preferred.Item1, preferred.Item2);
+
         foreach (var fallback in SelectionHotkeyFallbacks)
         {
-            if (fallback.Modifiers == configured.Item1 && fallback.Key == configured.Item2)
+            if (fallback.Modifiers == preferred.Item1 && fallback.Key == preferred.Item2)
             {
                 continue;
             }
@@ -111,12 +124,16 @@ public partial class MainWindow : Window
                 continue;
             }
 
-            Log.Wrn($"Configured hotkey unavailable. Falling back to {FormatHotkey((uint)fallback.Modifiers, fallback.Key)}");
-            _viewModel.SetActiveHotkey((uint)fallback.Modifiers, fallback.Key, persist: true);
+            var fallbackDisplay = FormatHotkey((uint)fallback.Modifiers, fallback.Key);
+            Log.Wrn($"{preferredDisplay} is taken; using {fallbackDisplay} for this session only (preference kept).");
+
+            // persist: false is load-bearing — see the note on this method.
+            _viewModel.SetActiveHotkey((uint)fallback.Modifiers, fallback.Key, persist: false);
             _selectionHotkey = fallbackHotkey;
             _activeSelectionHotkey = fallback;
             _viewModel.ShowStatus(
-                $"Configured hotkey unavailable. Using {FormatHotkey((uint)fallback.Modifiers, fallback.Key)}.");
+                $"{preferredDisplay} is in use by another app. Using {fallbackDisplay} for this session; " +
+                $"{preferredDisplay} will be tried again next launch.");
             return;
         }
 

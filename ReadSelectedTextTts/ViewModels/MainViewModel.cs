@@ -414,6 +414,15 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         StatusMessage = string.Empty;
     }
 
+    /// <summary>
+    /// Updates the hotkey shown in the UI, and optionally the saved preference.
+    ///
+    /// Pass <paramref name="persist"/>: true ONLY for a hotkey the user explicitly chose.
+    /// Never persist a registration fallback — that overwrites the preference with a
+    /// workaround, so the preferred combo is never retried and the shortcut degrades one
+    /// step per conflict. See <c>MainWindow.RegisterSelectionHotkey</c>. No caller passes
+    /// true today; the parameter is the seam for a future hotkey picker.
+    /// </summary>
     public void SetActiveHotkey(uint modifiers, uint key, bool persist)
     {
         _activeHotkeyModifiers = modifiers;
