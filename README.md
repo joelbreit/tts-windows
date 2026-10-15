@@ -57,6 +57,7 @@ The app supports multiple TTS providers behind a common abstraction
 
 - **Windows (Local)** — offline SAPI voices; zero setup/cost.
 - **Kokoro (Local)** — downloadable neural voices that run on the CPU without a cloud connection.
+- **Piper (Local)** — a smaller, faster offline neural voice (Lessac, US English).
 - **Azure AI Speech (Neural)** — cloud neural voices (~300 voices); needs a Speech
   resource key + region. The F0 free tier covers 500k chars/month.
 - **OpenAI TTS** — cloud voices via the OpenAI audio API; needs an OpenAI API key.
@@ -107,6 +108,19 @@ tar -xf .\models\kokoro-multi-lang-v1_0.tar.bz2 -C .\models
 ```
 
 Restart the app, select **Kokoro (Local)**, choose an English voice, and use **Read Test Text**. The downloaded model stays in the ignored `models` directory. For a published app, place the `models/kokoro-multi-lang-v1_0` folder next to the executable, or set its path under **Settings → Kokoro (Local) → Model directory**. Model loading happens when Kokoro is selected; subsequent reads reuse it. Playback speed is controlled by the app's existing speed slider.
+
+### Piper offline model
+
+Download the [sherpa-onnx Piper Lessac medium package](https://k2-fsa.github.io/sherpa/onnx/tts/pretrained_models/vits.html) once. From the repository root:
+
+```powershell
+New-Item -ItemType Directory -Force .\models | Out-Null
+curl.exe -L --fail -o .\models\vits-piper-en_US-lessac-medium.tar.bz2 https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/vits-piper-en_US-lessac-medium.tar.bz2
+tar -xf .\models\vits-piper-en_US-lessac-medium.tar.bz2 -C .\models
+Remove-Item .\models\vits-piper-en_US-lessac-medium.tar.bz2
+```
+
+Restart the app, select **Piper (Local)**, choose **Lessac (US English)**, and use **Read Test Text**. The model is about 77 MiB unpacked and stays in the ignored `models` directory. For a published app, place `models/vits-piper-en_US-lessac-medium` next to the executable, or set its path under **Settings → Piper (Local) → Model directory**. Piper uses the existing speed slider for playback speed.
 
 Open `⚙ Settings` to:
 - Browse providers with quality/latency/cost/free-tier info and pricing links

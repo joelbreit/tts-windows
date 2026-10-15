@@ -17,6 +17,7 @@ public sealed class TtsProviderRegistry
     {
         Register(new WindowsTtsProvider());
         Register(new KokoroTtsProvider());
+        Register(new PiperTtsProvider());
         Register(new AzureTtsProvider());
         Register(new OpenAiTtsProvider());
     }

@@ -78,10 +78,12 @@ public sealed class TtsService : IDisposable
         double rate,
         string source)
     {
-        // Kokoro is slower on CPU, so shorter chunks let it start speaking while
-        // subsequent chunks are still being generated.
+        // Shorter first chunks let local models start speaking promptly. Keep
+        // Piper's later chunks modest so they finish before the first one ends.
         var chunks = voice.ProviderId == KokoroTtsProvider.ProviderId
             ? TextChunker.Split(text, 60, 80, 80, 100)
+            : voice.ProviderId == PiperTtsProvider.ProviderId
+                ? TextChunker.Split(text, 80, 120, 240, 400)
             : TextChunker.Split(text);
         if (chunks.Count == 0)
         {

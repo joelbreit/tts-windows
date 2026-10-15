@@ -100,7 +100,7 @@ public sealed class KokoroTtsProvider : ITtsProvider
                     throw new InvalidOperationException("Kokoro generated no audio.");
                 }
 
-                return CreateWave(audio.Samples, audio.SampleRate);
+                return PcmWave.Create(audio.Samples, audio.SampleRate);
             }, cancellationToken);
 
             Log.Trc($"Kokoro synthesized {text.Length} chars, {wave.Length} WAV bytes, voice {voice.Id}.");
@@ -169,28 +169,4 @@ public sealed class KokoroTtsProvider : ITtsProvider
         File.Exists(Path.Combine(directory, "lexicon-us-en.txt")) &&
         Directory.Exists(Path.Combine(directory, "espeak-ng-data"));
 
-    private static byte[] CreateWave(float[] samples, int sampleRate)
-    {
-        using var stream = new MemoryStream(44 + samples.Length * sizeof(short));
-        using var writer = new BinaryWriter(stream);
-        writer.Write("RIFF"u8);
-        writer.Write(36 + samples.Length * sizeof(short));
-        writer.Write("WAVE"u8);
-        writer.Write("fmt "u8);
-        writer.Write(16);
-        writer.Write((short)1); // PCM
-        writer.Write((short)1); // Mono
-        writer.Write(sampleRate);
-        writer.Write(sampleRate * sizeof(short));
-        writer.Write((short)sizeof(short));
-        writer.Write((short)16);
-        writer.Write("data"u8);
-        writer.Write(samples.Length * sizeof(short));
-        foreach (var sample in samples)
-        {
-            writer.Write((short)Math.Round(Math.Clamp(sample, -1f, 1f) * short.MaxValue));
-        }
-
-        return stream.ToArray();
-    }
 }
