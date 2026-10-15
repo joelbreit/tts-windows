@@ -84,6 +84,11 @@ Consequences worth knowing:
 - `SynthesisMs` in telemetry is time-to-first-audio, not total synthesis time.
 - If a later chunk fails, playback stops there and the status row says which part
   it reached.
+- For OpenAI, a chunk still pending after six seconds starts one backup request.
+  The first successful response plays; the other is cancelled. Individual requests
+  have 15-second deadlines for short chunks and 30-second deadlines for long ones,
+  with one retry if both time out. A backup can incur an additional API charge if
+  the original request had already been processed.
 
 Enter cloud credentials under `⚙ Settings`. More providers can be added by
 implementing `ITtsProvider` and registering it — the provider dropdown, Settings

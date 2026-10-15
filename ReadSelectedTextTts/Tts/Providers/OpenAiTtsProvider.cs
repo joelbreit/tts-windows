@@ -38,9 +38,16 @@ public sealed class OpenAiTtsProvider : ITtsProvider
         ("verse", "Versatile, natural"),
     ];
 
-    // SendAsync buffers the complete MP3 response. Larger chunks can take longer
-    // than 30 seconds to generate and transfer, even when the request succeeds.
+    // A slow request gets one backup request. Whichever finishes successfully first
+    // supplies the audio; the other response is cancelled and its stream discarded.
+    private static readonly TimeSpan HedgeDelay = TimeSpan.FromSeconds(6);
+    private static readonly TimeSpan ShortRequestTimeout = TimeSpan.FromSeconds(15);
+    private static readonly TimeSpan LongRequestTimeout = TimeSpan.FromSeconds(30);
+
+    // Per-request deadlines below control synthesis. Keep the client timeout above
+    // them so it also covers best-effort connection warm-up.
     private static readonly HttpClient Http = TtsHttp.Create(TimeSpan.FromSeconds(120));
+    private static readonly HttpClient BackupHttp = TtsHttp.Create(TimeSpan.FromSeconds(120));
 
     public TtsProviderDescriptor Descriptor { get; } = new()
     {
@@ -122,24 +129,113 @@ public sealed class OpenAiTtsProvider : ITtsProvider
             response_format = "mp3",
         });
 
+        var timeout = text.Length <= 500 ? ShortRequestTimeout : LongRequestTimeout;
+        var primaryCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        primaryCts.CancelAfter(timeout);
+        var primary = SendSpeechRequestAsync(Http, payload, key.Trim(), text.Length, voice.Id, model, primaryCts.Token);
+        CancellationTokenSource? backupCts = null;
+        Task<TtsSynthesisResult>? backup = null;
+        Task<TtsSynthesisResult>? winner = null;
+
+        try
+        {
+            if (await Task.WhenAny(primary, Task.Delay(HedgeDelay, cancellationToken)) != primary
+                && !primary.IsCompleted)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                Log.Wrn($"OpenAI speech request still pending after {HedgeDelay.TotalSeconds:F0}s for {text.Length} chars; starting backup request.");
+                backupCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+                backupCts.CancelAfter(timeout);
+                backup = SendSpeechRequestAsync(BackupHttp, payload, key.Trim(), text.Length, voice.Id, model, backupCts.Token);
+            }
+
+            var pending = backup is null
+                ? new List<Task<TtsSynthesisResult>> { primary }
+                : new List<Task<TtsSynthesisResult>> { primary, backup };
+            Exception? lastFailure = null;
+
+            while (pending.Count > 0)
+            {
+                var completed = await Task.WhenAny(pending);
+                pending.Remove(completed);
+                try
+                {
+                    var result = await completed;
+                    winner = completed;
+                    return result;
+                }
+                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+                {
+                    throw;
+                }
+                catch (OperationCanceledException ex)
+                {
+                    Log.Wrn($"OpenAI speech request timed out for {text.Length} chars, voice '{voice.Id}' (model '{model}').");
+                    lastFailure = ex;
+                }
+                catch (Exception ex)
+                {
+                    lastFailure = ex;
+                }
+            }
+
+            throw lastFailure!;
+        }
+        finally
+        {
+            primaryCts.Cancel();
+            _ = DrainRequestAsync(primary, primaryCts, ReferenceEquals(primary, winner));
+            if (backup is not null && backupCts is not null)
+            {
+                backupCts.Cancel();
+                _ = DrainRequestAsync(backup, backupCts, ReferenceEquals(backup, winner));
+            }
+        }
+    }
+
+    private static async Task<TtsSynthesisResult> SendSpeechRequestAsync(
+        HttpClient http, string payload, string key, int textLength, string voiceId, string model,
+        CancellationToken cancellationToken)
+    {
         using var request = new HttpRequestMessage(HttpMethod.Post, Endpoint);
-        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", key.Trim());
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", key);
         request.Content = new StringContent(payload, Encoding.UTF8, "application/json");
 
         var stopwatch = Stopwatch.StartNew();
         try
         {
-            using var response = await Http.SendAsync(request, cancellationToken);
+            using var response = await http.SendAsync(request, cancellationToken);
             await EnsureSuccessAsync(response);
 
             var bytes = await response.Content.ReadAsByteArrayAsync(cancellationToken);
-            Log.Trc($"OpenAI synthesized {bytes.Length} bytes of MP3 in {stopwatch.ElapsedMilliseconds} ms for {text.Length} chars, voice '{voice.Id}' (model '{model}').");
+            Log.Trc($"OpenAI synthesized {bytes.Length} bytes of MP3 in {stopwatch.ElapsedMilliseconds} ms for {textLength} chars, voice '{voiceId}' (model '{model}').");
             return new TtsSynthesisResult { Stream = AudioStreams.FromBytes(bytes), ContentType = "audio/mpeg" };
         }
-        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
-            Log.Wrn($"OpenAI speech request timed out after {stopwatch.ElapsedMilliseconds} ms for {text.Length} chars, voice '{voice.Id}' (model '{model}').");
+            Log.Trc($"OpenAI speech request cancelled after {stopwatch.ElapsedMilliseconds} ms for {textLength} chars, voice '{voiceId}' (model '{model}').");
             throw;
+        }
+    }
+
+    private static async Task DrainRequestAsync(
+        Task<TtsSynthesisResult> task, CancellationTokenSource cancellation, bool handedOff)
+    {
+        try
+        {
+            var result = await task.ConfigureAwait(false);
+            if (!handedOff)
+            {
+                result.Stream.Dispose();
+            }
+        }
+        catch
+        {
+            // The caller already handled the failure, or this was the cancelled backup.
+        }
+        finally
+        {
+            cancellation.Dispose();
         }
     }
 
