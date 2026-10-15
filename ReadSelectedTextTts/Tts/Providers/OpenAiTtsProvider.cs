@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Text;
@@ -37,7 +38,9 @@ public sealed class OpenAiTtsProvider : ITtsProvider
         ("verse", "Versatile, natural"),
     ];
 
-    private static readonly HttpClient Http = TtsHttp.Create(TimeSpan.FromSeconds(30));
+    // SendAsync buffers the complete MP3 response. Larger chunks can take longer
+    // than 30 seconds to generate and transfer, even when the request succeeds.
+    private static readonly HttpClient Http = TtsHttp.Create(TimeSpan.FromSeconds(120));
 
     public TtsProviderDescriptor Descriptor { get; } = new()
     {
@@ -123,12 +126,21 @@ public sealed class OpenAiTtsProvider : ITtsProvider
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", key.Trim());
         request.Content = new StringContent(payload, Encoding.UTF8, "application/json");
 
-        using var response = await Http.SendAsync(request, cancellationToken);
-        await EnsureSuccessAsync(response);
+        var stopwatch = Stopwatch.StartNew();
+        try
+        {
+            using var response = await Http.SendAsync(request, cancellationToken);
+            await EnsureSuccessAsync(response);
 
-        var bytes = await response.Content.ReadAsByteArrayAsync(cancellationToken);
-        Log.Trc($"OpenAI synthesized {bytes.Length} bytes of MP3 for voice '{voice.Id}' (model '{model}').");
-        return new TtsSynthesisResult { Stream = AudioStreams.FromBytes(bytes), ContentType = "audio/mpeg" };
+            var bytes = await response.Content.ReadAsByteArrayAsync(cancellationToken);
+            Log.Trc($"OpenAI synthesized {bytes.Length} bytes of MP3 in {stopwatch.ElapsedMilliseconds} ms for {text.Length} chars, voice '{voice.Id}' (model '{model}').");
+            return new TtsSynthesisResult { Stream = AudioStreams.FromBytes(bytes), ContentType = "audio/mpeg" };
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            Log.Wrn($"OpenAI speech request timed out after {stopwatch.ElapsedMilliseconds} ms for {text.Length} chars, voice '{voice.Id}' (model '{model}').");
+            throw;
+        }
     }
 
     public Task WarmUpAsync(IProviderConfig config, CancellationToken cancellationToken = default) =>

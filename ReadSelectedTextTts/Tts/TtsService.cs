@@ -55,6 +55,7 @@ public sealed class TtsService : IDisposable
         {
             Log.Err($"Media playback failed: {args.Error} ({args.ErrorMessage})");
             Stop();
+            PlaybackError?.Invoke(this, $"Audio playback failed: {args.ErrorMessage}");
         };
     }
 
@@ -62,9 +63,11 @@ public sealed class TtsService : IDisposable
 
     public bool IsPaused { get; private set; }
 
+    public bool IsLoading { get; private set; }
+
     public event EventHandler? PlaybackStateChanged;
 
-    /// <summary>Raised when a chunk after the first fails, so the UI can surface why audio stopped early.</summary>
+    /// <summary>Raised when synthesis or playback fails, so the UI can surface the error.</summary>
     public event EventHandler<string>? PlaybackError;
 
     public async Task SpeakAsync(
@@ -102,6 +105,7 @@ public sealed class TtsService : IDisposable
             _session = session;
             _rate = rate;
         }
+        UpdateLoadingState(true);
 
         try
         {
@@ -125,13 +129,22 @@ public sealed class TtsService : IDisposable
             usageEvent.Success = true;
             Log.Dbg($"Playback started. Chunk 1/{chunks.Count}, timeToAudioMs={usageEvent.SynthesisMs}");
         }
+        catch (OperationCanceledException) when (session.IsCancellationRequested)
+        {
+            stopwatch.Stop();
+            usageEvent.SynthesisMs = stopwatch.ElapsedMilliseconds;
+            Log.Trc("First audio chunk cancelled because playback was stopped or replaced.");
+        }
         catch (Exception ex)
         {
             stopwatch.Stop();
             usageEvent.SynthesisMs = stopwatch.ElapsedMilliseconds;
             usageEvent.Success = false;
             usageEvent.Error = ex.Message;
-            EndSession(session);
+            if (EndSession(session))
+            {
+                PlaybackError?.Invoke(this, $"Audio could not load: {ex.Message}");
+            }
             throw;
         }
         finally
@@ -196,6 +209,7 @@ public sealed class TtsService : IDisposable
         }
 
         UpdatePlaybackState(false, false);
+        UpdateLoadingState(false);
     }
 
     public void Dispose()
@@ -240,6 +254,7 @@ public sealed class TtsService : IDisposable
             }
         }
 
+        UpdateLoadingState(false);
         UpdatePlaybackState(true, IsPaused);
         return true;
     }
@@ -266,6 +281,7 @@ public sealed class TtsService : IDisposable
             return;
         }
 
+        UpdateLoadingState(true);
         _ = AdvanceAsync(session);
     }
 
@@ -282,26 +298,28 @@ public sealed class TtsService : IDisposable
             var result = await session.GetAsync(next);
             TryPlay(session, next, result);
         }
-        catch (OperationCanceledException)
+        catch (OperationCanceledException) when (session.IsCancellationRequested)
         {
             Log.Trc($"Chunk {next + 1} cancelled.");
         }
         catch (Exception ex)
         {
             Log.Err($"Chunk {next + 1}/{session.ChunkCount} failed: {ex}");
-            EndSession(session);
-            PlaybackError?.Invoke(this, $"Read stopped after part {next} of {session.ChunkCount}: {ex.Message}");
+            if (EndSession(session))
+            {
+                PlaybackError?.Invoke(this, $"Read stopped after part {next} of {session.ChunkCount}: {ex.Message}");
+            }
         }
     }
 
     /// <summary>Tears down a session, but only if it is still the active one.</summary>
-    private void EndSession(PlaybackSession session)
+    private bool EndSession(PlaybackSession session)
     {
         lock (_gate)
         {
             if (!ReferenceEquals(_session, session))
             {
-                return;
+                return false;
             }
 
             _session = null;
@@ -310,7 +328,9 @@ public sealed class TtsService : IDisposable
         }
 
         session.Dispose();
+        UpdateLoadingState(false);
         UpdatePlaybackState(false, false);
+        return true;
     }
 
     /// <summary>Releases the stream and media source backing the chunk that just finished.</summary>
@@ -369,6 +389,17 @@ public sealed class TtsService : IDisposable
         Log.Trc($"Playback state updated: IsPlaying={isPlaying}, IsPaused={isPaused}");
     }
 
+    private void UpdateLoadingState(bool isLoading)
+    {
+        if (IsLoading == isLoading)
+        {
+            return;
+        }
+
+        IsLoading = isLoading;
+        PlaybackStateChanged?.Invoke(this, EventArgs.Empty);
+    }
+
     /// <summary>
     /// One read request: its chunks, the synthesis tasks in flight for them, and the
     /// cancellation that unwinds the lot when the user stops or starts another read.
@@ -404,6 +435,8 @@ public sealed class TtsService : IDisposable
 
         public int ChunkCount => _chunks.Count;
 
+        public bool IsCancellationRequested => _cts.IsCancellationRequested;
+
         /// <summary>Starts synthesis for a chunk if it has not been requested yet. No-op out of range.</summary>
         public void Prefetch(int index)
         {
@@ -420,7 +453,28 @@ public sealed class TtsService : IDisposable
                 }
 
                 Log.Trc($"Prefetching chunk {index + 1}/{_chunks.Count} ({_chunks[index].Length} chars).");
-                _pending[index] = _provider.SynthesizeAsync(_chunks[index], _voice, _config, _cts.Token);
+                _pending[index] = SynthesizeWithTimeoutRetryAsync(index);
+            }
+        }
+
+        private async Task<TtsSynthesisResult> SynthesizeWithTimeoutRetryAsync(int index)
+        {
+            for (var attempt = 1; ; attempt++)
+            {
+                try
+                {
+                    return await _provider.SynthesizeAsync(_chunks[index], _voice, _config, _cts.Token);
+                }
+                catch (OperationCanceledException ex) when (!_cts.IsCancellationRequested)
+                {
+                    if (attempt >= 2)
+                    {
+                        throw new TimeoutException($"Speech synthesis for part {index + 1} timed out twice.", ex);
+                    }
+
+                    Log.Wrn($"Speech synthesis for part {index + 1}/{_chunks.Count} timed out; retrying once.");
+                    await Task.Delay(500, _cts.Token);
+                }
             }
         }
 

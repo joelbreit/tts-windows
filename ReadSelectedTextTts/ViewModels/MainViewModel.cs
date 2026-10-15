@@ -31,6 +31,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     private uint _activeClipboardHotkeyKey = 0x43;
     private bool _isPlaying;
     private bool _isPaused;
+    private bool _isAudioLoading;
+    private bool _hasAudioError;
     private string _statusMessage = string.Empty;
     private bool _disposed;
 
@@ -56,7 +58,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         ReadClipboardCommand = new AsyncRelayCommand(ReadClipboardAsync, () => SelectedVoice is not null);
         PauseCommand = new RelayCommand(Pause, () => IsPlaying && !IsPaused);
         ResumeCommand = new RelayCommand(Resume, () => IsPlaying && IsPaused);
-        StopCommand = new RelayCommand(Stop, () => IsPlaying);
+        StopCommand = new RelayCommand(Stop, () => IsPlaying || IsAudioLoading);
         ReadTestTextCommand = new AsyncRelayCommand(ReadManualTextAsync, () => SelectedVoice is not null && !string.IsNullOrWhiteSpace(ManualText));
         IncreaseSpeedCommand = new RelayCommand(IncreaseSpeed, () => Speed < 4.0);
         DecreaseSpeedCommand = new RelayCommand(DecreaseSpeed, () => Speed > 0.1);
@@ -189,6 +191,24 @@ public sealed class MainViewModel : ObservableObject, IDisposable
                 RaiseCommandCanExecuteChanged();
             }
         }
+    }
+
+    public bool IsAudioLoading
+    {
+        get => _isAudioLoading;
+        private set
+        {
+            if (SetProperty(ref _isAudioLoading, value))
+            {
+                RaiseCommandCanExecuteChanged();
+            }
+        }
+    }
+
+    public bool HasAudioError
+    {
+        get => _hasAudioError;
+        private set => SetProperty(ref _hasAudioError, value);
     }
 
     /// <summary>Latest notice for the status row at the bottom of the window. Empty hides the row.</summary>
@@ -453,11 +473,13 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     private async Task SpeakAsync(string text, string source)
     {
         ClearStatus();
+        HasAudioError = false;
         var voice = SelectedVoice!;
         var config = _registry.ConfigFor(voice.ProviderId, _settings);
         await _ttsService.SpeakAsync(text, voice, config, Speed, source);
         IsPlaying = _ttsService.IsPlaying;
         IsPaused = _ttsService.IsPaused;
+        IsAudioLoading = _ttsService.IsLoading;
     }
 
     private bool EnsureVoice()
@@ -490,6 +512,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         _ttsService.Stop();
         IsPlaying = _ttsService.IsPlaying;
         IsPaused = _ttsService.IsPaused;
+        IsAudioLoading = _ttsService.IsLoading;
+        HasAudioError = false;
     }
 
     private async Task ReadManualTextAsync()
@@ -585,11 +609,16 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         var dispatcher = System.Windows.Application.Current?.Dispatcher;
         if (dispatcher is null || dispatcher.CheckAccess())
         {
+            HasAudioError = true;
             ShowStatus(message);
             return;
         }
 
-        dispatcher.Invoke(() => ShowStatus(message));
+        dispatcher.Invoke(() =>
+        {
+            HasAudioError = true;
+            ShowStatus(message);
+        });
     }
 
     private void OnPlaybackStateChanged(object? sender, EventArgs e)
@@ -598,6 +627,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         {
             IsPlaying = _ttsService.IsPlaying;
             IsPaused = _ttsService.IsPaused;
+            IsAudioLoading = _ttsService.IsLoading;
             return;
         }
 
@@ -605,6 +635,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         {
             IsPlaying = _ttsService.IsPlaying;
             IsPaused = _ttsService.IsPaused;
+            IsAudioLoading = _ttsService.IsLoading;
         });
     }
 

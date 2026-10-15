@@ -54,13 +54,21 @@
                 </StackPanel>
             </Border>
             <TextBlock VerticalAlignment="Center" Margin="4,0,0,0" FontSize="12"
-                       FontWeight="SemiBold"
-                       Visibility="{Binding IsPlaying, Converter={StaticResource BoolToVis}}">
+                       FontWeight="SemiBold">
                 <TextBlock.Style>
                     <Style TargetType="TextBlock">
+                        <Setter Property="Visibility" Value="Collapsed"/>
                         <Setter Property="Foreground" Value="{StaticResource PlayingBrush}"/>
                         <Setter Property="Text" Value="● Playing"/>
                         <Style.Triggers>
+                            <MultiDataTrigger>
+                                <MultiDataTrigger.Conditions>
+                                    <Condition Binding="{Binding IsPlaying}" Value="True"/>
+                                    <Condition Binding="{Binding IsAudioLoading}" Value="False"/>
+                                    <Condition Binding="{Binding HasAudioError}" Value="False"/>
+                                </MultiDataTrigger.Conditions>
+                                <Setter Property="Visibility" Value="Visible"/>
+                            </MultiDataTrigger>
                             <DataTrigger Binding="{Binding IsPaused}" Value="True">
                                 <Setter Property="Foreground" Value="{StaticResource PausedBrush}"/>
                                 <Setter Property="Text" Value="● Paused"/>
@@ -69,6 +77,14 @@
                     </Style>
                 </TextBlock.Style>
             </TextBlock>
+            <TextBlock Text="● Loading audio…" VerticalAlignment="Center"
+                       Margin="4,0,0,0" FontSize="12" FontWeight="SemiBold"
+                       Foreground="{StaticResource AccentBrush}"
+                       Visibility="{Binding IsAudioLoading, Converter={StaticResource BoolToVis}}"/>
+            <TextBlock Text="● Audio failed" VerticalAlignment="Center"
+                       Margin="4,0,0,0" FontSize="12" FontWeight="SemiBold"
+                       Foreground="{StaticResource DangerBrush}"
+                       Visibility="{Binding HasAudioError, Converter={StaticResource BoolToVis}}"/>
         </WrapPanel>
 
         <!-- TTS Provider -->
