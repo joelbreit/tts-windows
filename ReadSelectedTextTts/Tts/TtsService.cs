@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using ReadSelectedTextTts.Models;
 using ReadSelectedTextTts.Telemetry;
+using ReadSelectedTextTts.Tts.Providers;
 using Log = Logger.Logger;
 using Windows.Media.Core;
 using Windows.Media.Playback;
@@ -77,7 +78,11 @@ public sealed class TtsService : IDisposable
         double rate,
         string source)
     {
-        var chunks = TextChunker.Split(text);
+        // Kokoro is slower on CPU, so shorter chunks let it start speaking while
+        // subsequent chunks are still being generated.
+        var chunks = voice.ProviderId == KokoroTtsProvider.ProviderId
+            ? TextChunker.Split(text, 60, 80, 80, 100)
+            : TextChunker.Split(text);
         if (chunks.Count == 0)
         {
             Log.Wrn("SpeakAsync called with empty text.");

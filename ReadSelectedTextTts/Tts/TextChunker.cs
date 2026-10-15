@@ -43,6 +43,11 @@ public static class TextChunker
     /// blank input, and a single chunk for anything short enough to not benefit.
     /// </summary>
     public static IReadOnlyList<string> Split(string text)
+        => Split(text, FirstChunkTargetChars, FirstChunkMaxChars, ChunkTargetChars, MaxChunkChars);
+
+    /// <summary>Splits text using provider-specific budgets, preserving sentence breaks when possible.</summary>
+    public static IReadOnlyList<string> Split(
+        string text, int firstTargetChars, int firstMaxChars, int chunkTargetChars, int maxChunkChars)
     {
         if (string.IsNullOrWhiteSpace(text))
         {
@@ -50,7 +55,7 @@ public static class TextChunker
         }
 
         var trimmed = text.Trim();
-        if (trimmed.Length <= FirstChunkTargetChars)
+        if (trimmed.Length <= firstTargetChars)
         {
             return [trimmed];
         }
@@ -66,8 +71,8 @@ public static class TextChunker
             {
                 // The first chunk gets its own, much tighter budget.
                 var isFirst = chunks.Count == 0;
-                var target = isFirst ? FirstChunkTargetChars : ChunkTargetChars;
-                var max = isFirst ? FirstChunkMaxChars : MaxChunkChars;
+                var target = isFirst ? firstTargetChars : chunkTargetChars;
+                var max = isFirst ? firstMaxChars : maxChunkChars;
 
                 // Adding this sentence would overshoot the target: close the chunk here,
                 // on a boundary, and re-evaluate against the next chunk's larger budget.

@@ -56,6 +56,7 @@ The app supports multiple TTS providers behind a common abstraction
 (`ITtsProvider` + `TtsProviderRegistry`). Built-in providers:
 
 - **Windows (Local)** — offline SAPI voices; zero setup/cost.
+- **Kokoro (Local)** — downloadable neural voices that run on the CPU without a cloud connection.
 - **Azure AI Speech (Neural)** — cloud neural voices (~300 voices); needs a Speech
   resource key + region. The F0 free tier covers 500k chars/month.
 - **OpenAI TTS** — cloud voices via the OpenAI audio API; needs an OpenAI API key.
@@ -95,6 +96,18 @@ implementing `ITtsProvider` and registering it — the provider dropdown, Settin
 UI, config storage, and telemetry pick it up automatically. See
 [`docs/tts-options.html`](./docs/tts-options.html) for the provider shortlist.
 
+### Kokoro offline model
+
+Download the [sherpa-onnx Kokoro v1.0 model package](https://k2-fsa.github.io/sherpa/onnx/tts/pretrained_models/kokoro.html) once. From the repository root:
+
+```powershell
+New-Item -ItemType Directory -Force .\models | Out-Null
+curl.exe -L --fail -o .\models\kokoro-multi-lang-v1_0.tar.bz2 https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/kokoro-multi-lang-v1_0.tar.bz2
+tar -xf .\models\kokoro-multi-lang-v1_0.tar.bz2 -C .\models
+```
+
+Restart the app, select **Kokoro (Local)**, choose an English voice, and use **Read Test Text**. The downloaded model stays in the ignored `models` directory. For a published app, place the `models/kokoro-multi-lang-v1_0` folder next to the executable, or set its path under **Settings → Kokoro (Local) → Model directory**. Model loading happens when Kokoro is selected; subsequent reads reuse it. Playback speed is controlled by the app's existing speed slider.
+
 Open `⚙ Settings` to:
 - Browse providers with quality/latency/cost/free-tier info and pricing links
 - Enter per-provider credentials (e.g. API keys) via dynamically-generated fields
@@ -107,7 +120,7 @@ only and never leaves the machine.
 
 ## A note on voices
 
-The voice dropdown lists only the classic Windows SAPI voices (e.g. David, Mark,
+With **Windows (Local)** selected, the voice dropdown lists only the classic Windows voices (e.g. David, Mark,
 Zira). The Windows 11 "Natural" / "Natural HD" voices (Ava, Aria, etc.) **cannot
 be used by this app** — they are walled off from every public Windows TTS API and
 reserved for Narrator. This is by design, not a bug, and installing them will not
